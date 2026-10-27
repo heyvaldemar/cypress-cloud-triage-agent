@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # validate.sh [check...] - the static checks, without a cluster:
 #
-#   kubeconform   every manifest and the triage Job template are valid
-#                 Kubernetes 1.37 objects
+#   kubeconform   every manifest, the triage Job template and every plant are
+#                 valid Kubernetes 1.37 objects
+#   plants        tests/e2e/plants is what tests/e2e/plants.py makes from the
+#                 template now
 #   images        every image is referenced by digest
 #   python        every Python file compiles
 #   receiver      the webhook door's decisions (tests/unit/test_receiver.py)
@@ -33,11 +35,13 @@ check_kubeconform() {
   kubectl kustomize manifests >out/manifests.yaml || return 1
   kubeconform -strict -summary -output text -kubernetes-version "$KUBE_VERSION" \
     -cache .cache/kubeconform -schema-location "$K8S_SCHEMAS" \
-    out/manifests.yaml manifests/receiver/job.json
+    out/manifests.yaml manifests/receiver/job.json tests/e2e/plants
 }
 
+check_plants() { python3 tests/e2e/plants.py --check; }
+
 check_images() {
-  # tests/e2e/plants.py is left out on purpose: one plant is a tag-only image.
+  # tests/e2e/plants is left out on purpose: one plant is a tag-only image.
   local bad
   bad="$(grep -rnE '(image:|"image":|^[A-Z]+=)[[:space:]]*"?[a-z0-9.-]+(\.[a-z]+)?/[^@[:space:]"]+:[^@[:space:]"]+("|$|[[:space:]])' \
     manifests kind tests/e2e/run.sh .github/workflows 2>/dev/null | grep -v '@sha256:' || true)"
@@ -101,7 +105,7 @@ PY
 }
 
 checks=("$@")
-[ ${#checks[@]} -eq 0 ] && checks=(kubeconform images python receiver notifier mcp agreement)
+[ ${#checks[@]} -eq 0 ] && checks=(kubeconform plants images python receiver notifier mcp agreement)
 failed=0
 for c in "${checks[@]}"; do
   if "check_$c"; then echo "-- $c: ok"; else echo "-- $c: FAILED"; failed=1; fi

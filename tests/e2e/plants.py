@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """The Jobs admission must refuse in triage-agents, each made from the real template.
 
-    tests/e2e/plants.py   one JSON line per plant: {"name", "expect", "object"}
+    tests/e2e/plants.py           write tests/e2e/plants/<name>.yaml, one per plant
+    tests/e2e/plants.py --check   exit 1 if the files there are not what this writes
 
 Every plant is the Job the receiver would create for a run (receiver.py's
 job_for on receiver/job.json), with one thing changed: what a tricked or
-replaced receiver might send. `expect` is the refusal message admission must
-give, or "admitted" for the control, which is the receiver's Job unchanged.
-tests/e2e/run.sh applies each with a server-side dry run.
+replaced receiver might send. Its first line, `# expect: <message>`, is the
+refusal admission must give, or `admitted` for the control, which is the
+receiver's Job unchanged. tests/e2e/run.sh applies each with a server-side
+dry run.
 
-Made from the template rather than written out, so a plant cannot drift from
-what the receiver actually sends: a change to job.json changes every plant.
+Made from the template rather than written by hand, so a plant cannot drift
+from what the receiver sends: scripts/validate.sh runs --check, and a change
+to job.json that is not followed by this script fails it.
 """
 import copy
 import importlib.util
 import json
 import os
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 spec = importlib.util.spec_from_file_location("receiver", os.path.join(ROOT, "manifests/receiver/receiver.py"))
@@ -42,11 +46,15 @@ def env(j, name, value):
     agent(j)["env"] = e + [{"name": name, "value": value}]
 
 
+PLANTS = {}
+
+
 def plant(name, expect, change):
     j = job()
     j["metadata"]["name"] = "plant-" + name
     change(j)
-    print(json.dumps({"name": name, "expect": expect, "object": j}))
+    # JSON is YAML, so the file is the object as JSON under its expect line.
+    PLANTS[name + ".yaml"] = "# expect: %s\n%s\n" % (expect, json.dumps(j, indent=2))
 
 
 def as_deployment(j):
@@ -95,3 +103,30 @@ plant("a-writable-root", "read-only root filesystem",
       lambda j: agent(j)["securityContext"].update(readOnlyRootFilesystem=False))
 plant("no-limits", "declares CPU and memory limits", lambda j: agent(j)["resources"].pop("limits"))
 plant("a-deployment", "only Jobs run in triage-agents", as_deployment)
+
+
+def main():
+    out = os.path.join(ROOT, "tests", "e2e", "plants")
+    if "--check" in sys.argv:
+        have = sorted(n for n in os.listdir(out) if n.endswith(".yaml")) if os.path.isdir(out) else []
+        stale = [n for n in have if n not in PLANTS]
+        differ = [n for n in PLANTS if n not in have or open(os.path.join(out, n)).read() != PLANTS[n]]
+        for n in stale:
+            print("tests/e2e/plants/%s is not a plant this script makes" % n)
+        for n in differ:
+            print("tests/e2e/plants/%s is not what the template makes now; run tests/e2e/plants.py" % n)
+        if not stale and not differ:
+            print("%d plants, each what the template makes" % len(PLANTS))
+        sys.exit(1 if stale or differ else 0)
+    os.makedirs(out, exist_ok=True)
+    for n in os.listdir(out):
+        if n.endswith(".yaml") and n not in PLANTS:
+            os.remove(os.path.join(out, n))
+    for n, text in PLANTS.items():
+        with open(os.path.join(out, n), "w", encoding="utf-8") as f:
+            f.write(text)
+    print("wrote %d plants to tests/e2e/plants" % len(PLANTS))
+
+
+if __name__ == "__main__":
+    main()

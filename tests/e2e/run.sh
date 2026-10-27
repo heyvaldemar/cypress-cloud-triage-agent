@@ -8,8 +8,9 @@
 #
 #   1. Cypress runs the spec in the pinned image: one test passes, two fail,
 #      and one failure message carries the instruction a customer typed
-#   2. admission refuses each Job tests/e2e/plants.py makes from the real
-#      template for the reason it names, and admits the receiver's own Job
+#   2. admission refuses each Job in tests/e2e/plants (made from the real
+#      template by tests/e2e/plants.py) for the reason its `# expect:` line
+#      names, and admits the receiver's own Job
 #   3. the receiver refuses forged, unsigned, altered, stale and malformed
 #      deliveries and starts nothing; the CI trigger's signed delivery starts
 #      one triage; a replay, a replay with a new event ID and a retry start
@@ -95,11 +96,10 @@ verdicts < <(python3 tests/e2e/checks.py cypress)
 
 # --- 2 -----------------------------------------------------------------------
 step "2. admission holds triage-agents to the receiver's Job"
-while IFS= read -r line; do
-  name="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["name"])' "$line")"
-  expect="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["expect"])' "$line")"
-  out="$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1])["object"]))' "$line" |
-    kubectl apply --dry-run=server -f - 2>&1)"
+for plant in tests/e2e/plants/*.yaml; do
+  name="$(basename "$plant" .yaml)"
+  expect="$(sed -n 's/^# expect: //p' "$plant")"
+  out="$(kubectl apply --dry-run=server -f "$plant" 2>&1)"
   rc=$?
   if [ "$expect" = admitted ]; then
     [ $rc -eq 0 ] && pass "$name: admitted" || fail "$name: expected admitted, got (rc=$rc): $out"
@@ -108,7 +108,7 @@ while IFS= read -r line; do
   else
     fail "$name: expected a refusal saying '$expect', got (rc=$rc): $out"
   fi
-done < <(python3 tests/e2e/plants.py)
+done
 
 # --- 3 -----------------------------------------------------------------------
 step "3. the receiver: what it refuses, and the one delivery that starts a triage"

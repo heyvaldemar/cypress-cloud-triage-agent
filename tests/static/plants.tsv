@@ -1,6 +1,7 @@
 # file	old	new	check that must fail	what it plants (each field JSON-encoded)
 "manifests/receiver/job.json"	"\"image\": \"docker.io/library/python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741\""	"\"image\": \"docker.io/library/python:3.13-alpine\""	"images"	"the agent's image pinned by tag only"
 "manifests/admission.yaml"	"  validationActions: [Deny]\n"	"  validationAction: [Deny]\n"	"kubeconform"	"a misspelled field in a policy binding"
+"tests/e2e/plants/retries.yaml"	"\"backoffLimit\": 6,"	"\"backoffLimit\": 0,"	"plants"	"an admission plant edited by hand away from what the template makes"
 "manifests/agent/agent.py"	"def report(check, expected, got, detail=\"\"):"	"def report(check, expected, got, detail=\"\")"	"python"	"an agent that does not compile"
 "manifests/receiver/receiver.py"	"if not hmac.compare_digest(signature, sign(self.secret, timestamp, raw)):"	"if not signature.startswith(\"sha256=\"):"	"receiver"	"a receiver that reads the signature's shape and not its value"
 "manifests/receiver/receiver.py"	"if abs(now - int(timestamp)) > self.window:"	"if now - int(timestamp) > self.window:"	"receiver"	"a receiver that takes a delivery dated in the future"

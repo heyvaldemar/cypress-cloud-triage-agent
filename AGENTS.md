@@ -11,12 +11,12 @@ Two claims wait for a paid Cypress plan and a token, and are not made until a ru
 ## Before changing anything
 
 - Read the decision record that covers it, under `docs/decisions/`. A change that alters a decision amends that record or adds one, in the same format, ending with how the choice is explained to a customer. A change to a threat or a control changes its row in `docs/threat-model.md`.
-- `make check` runs `scripts/validate.sh` (kubeconform, images, python, the three doors' unit tests, and agreement between the pieces), then `tests/static/plant_violations.py`, which shows each check its planted violation from `tests/static/plants.tsv`. It must end all caught, none missed, none stale. Verify also runs actionlint and shellcheck; `make check` does not.
+- `make check` runs `scripts/validate.sh` (kubeconform, the admission plants against the template, images, python, the three doors' unit tests, and agreement between the pieces), then `tests/static/plant_violations.py`, which shows each check its planted violation from `tests/static/plants.tsv`. It must end all caught, none missed, none stale. Verify also runs actionlint and shellcheck; `make check` does not.
 - `make test` runs Cypress in its pinned image and then the e2e against the cluster `make up` creates. It runs on Docker Desktop too.
 
 ## A check is trusted only after it has failed
 
-A new or changed check ships with the violation it exists for: a plant in `tests/e2e/plants.py` (a Job made from the real template with one thing changed, and the refusal it must get), a case in `tests/e2e/webhook.py` or `tests/unit/`, a row in `tests/static/plants.tsv`, or a deliberate sabotage run whose failing output is recorded in the commit message. A plant whose text is no longer in its file is reported stale and fails the run, so a change to a planted file updates its row in the same commit. A check that has never been seen to fail proves nothing.
+A new or changed check ships with the violation it exists for: a plant in `tests/e2e/plants.py`, written to `tests/e2e/plants/` (a Job made from the real template with one thing changed, under a `# expect:` line naming the refusal it must get), a case in `tests/e2e/webhook.py` or `tests/unit/`, a row in `tests/static/plants.tsv`, or a deliberate sabotage run whose failing output is recorded in the commit message. A plant whose text is no longer in its file is reported stale and fails the run, so a change to a planted file updates its row in the same commit. A check that has never been seen to fail proves nothing.
 
 Verdicts in `tests/e2e/run.sh` are read with `verdicts < <(cmd)` or `judge < <(cmd)`, never at the end of a pipe: a pipe runs the loop in a subshell, and a failure there does not reach the exit status. Python that reads files for the e2e goes in `tests/e2e/checks.py`, not in a heredoc: bash 3.2, which macOS ships, cannot parse a heredoc inside a process substitution.
 
@@ -45,7 +45,7 @@ Dependabot reads only the actions. Everything else is moved by hand, with the ne
 
 ## Numbers
 
-The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, eighteen planted violations, the 620-character note) are the counts in `tests/e2e/plants.py`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
+The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, nineteen planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
 
 ## Releases
 

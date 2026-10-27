@@ -12,7 +12,9 @@ answering the request:
   2. fresh: the timestamp is a Unix time in seconds within five minutes of
      now, either way. A value that is not digits is refused, not coerced:
      docs.cypress.io's Node example computes Number(timestamp), and NaN
-     fails no "older than five minutes" test;
+     fails no "older than five minutes" test (the timestamp is signed, so
+     only a secret holder could send one, but a check should not pass what
+     it cannot read);
   3. not replayed: a signature already seen is refused. The signature binds
      the timestamp and the body, so an exact replay inside the window is
      caught here. X-Cypress-Event-Id is not covered by the signature, so it

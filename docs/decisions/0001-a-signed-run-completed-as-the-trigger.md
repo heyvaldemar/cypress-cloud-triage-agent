@@ -9,9 +9,9 @@ A triage agent should start when a run fails, without anyone asking it to. Cypre
 
 Whatever starts a triage is a door anyone on the internet can knock on. Reading the docs closely, three things matter more than the HMAC itself:
 
-- **Only the timestamp and the body are signed.** `X-Cypress-Event`, `X-Cypress-Event-Id`, `X-Cypress-Event-Version` and `X-Cypress-Request-Id` are not. The docs say to make the handler idempotent "by keying on `X-Cypress-Event-Id`". A captured delivery replayed inside the five-minute window with a new `X-Cypress-Event-Id` carries a valid signature and a key the handler has never seen.
+- **Only the timestamp and the body are signed.** `X-Cypress-Event`, `X-Cypress-Event-Id`, `X-Cypress-Event-Version` and `X-Cypress-Request-Id` travel beside them, unsigned. Whatever the receiver decides on, it decides on the signed part: which event this is, which run, and whether it has seen this delivery before.
 - **The event type is a header.** A captured `run.accessibility.completed` delivery with `X-Cypress-Event: run.completed` still verifies.
-- **The docs' Node example coerces the timestamp.** It rejects a request when `Math.abs(Date.now() / 1000 - Number(timestamp)) > 300`, and `Number("NaN")` makes that comparison false. Only a holder of the secret can sign such a timestamp, so this is not a way in, but a check that passes on input it cannot read is a check that will pass on the next thing it cannot read either.
+- **The docs' Node example coerces the timestamp.** It rejects a request when `Math.abs(Date.now() / 1000 - Number(timestamp)) > 300`, and `Number("NaN")` makes that comparison false. The timestamp is signed, so only a holder of the secret could send one: a mistake in an example, not a way in. The receiver here takes digits only, because a check that passes on input it cannot read will pass on the next thing it cannot read too.
 
 ## Decision
 
@@ -34,7 +34,7 @@ Until the project is on a plan with webhooks, the last step of the CI job that r
 
 ## Alternatives
 
-- **Key idempotency on `X-Cypress-Event-Id`, as the docs suggest.** Fine for Cypress's own retries, which keep the ID; wrong for a replay, which can change it. Both the e2e and the unit tests send the replay with a new ID.
+- **Key replays on `X-Cypress-Event-Id`.** It identifies Cypress's own retries, which keep it, but the signature does not cover it, so it cannot be what stops a delivery from being sent twice. Both the e2e and the unit tests send a replay with a new ID.
 - **Poll Cloud for new runs.** No public door, but a credential on a schedule and a delay, and Cloud MCP's limit of 100 tool requests an hour is shared with the agent.
 - **Run the agent inside the CI job.** No door at all, but then the agent runs where the repository's secrets and write token are, which is the opposite of what the walls here are for.
 

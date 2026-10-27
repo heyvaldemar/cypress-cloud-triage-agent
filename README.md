@@ -24,24 +24,24 @@ Every line is a check in `tests/e2e/run.sh` on a fresh cluster, or in `scripts/v
 | Only a delivery signed with the secret starts a triage | unsigned, forged, signed with another secret, body or timestamp changed after signing: each refused, none starts a Job; the CI trigger's signed delivery starts one |
 | A replay starts nothing, even with the unsigned headers changed | the same delivery again, and again with a new `X-Cypress-Event-Id`: 409; a retry signed with a new timestamp: 200, still one Job |
 | The receiver reads only what is signed | a stale or future timestamp, a timestamp that is not a number, an accessibility body sent as `run.completed`, a project it does not serve, a body over 64 KiB: each refused or ignored |
-| A receiver that is tricked or replaced can start the agent and nothing else | twenty Jobs made from the real template with one change each (another image, command, script, Secret, token, resolver, environment, retry count, lifetime) refused for the reason each names; the receiver's own Job admitted |
+| A receiver that is tricked or replaced can start the agent and nothing else | twenty Jobs in `tests/e2e/plants/`, made from the real template with one change each (another image, command, script, Secret, token, resolver, environment, retry count, lifetime) refused for the reason each names; the receiver's own Job admitted |
 | A fooled agent reaches its two doors and nothing else | it follows the planted note and is blocked sending the failure context out; also blocked: the receiver, Slack without the notifier, the Kubernetes API, the metadata service, the internet by name and by IP address; its resolver answers no outside name |
 | A fooled agent reads its own run and nothing else | the two tools it was granted, read; screenshots and `run_shell`, as the note asks: refused; another run and another project: out of scope; a loop: rate limited |
 | What reaches Slack is defused, and the counts are Cypress's | one message; its first line says 2 of 3 failed although the agent left one out; no live link outside `cloud.cypress.io`, no mention, previews off; a second message refused |
 | The agent holds no credential worth stealing | it holds two door tokens; the signing secret exists in `triage` only, the Slack URL in `notify` only, no Secret in the agents' namespace |
 | The blocks are the walls', not the environment's | a pod outside the agents' namespace reaches the outside address and the receiver; with an agents' namespace's egress wide open, the receiver and Slack still refuse it |
 | Every attempt is on record | the doors' logs show the refused tools, the out-of-scope reads and the rate limit with the agent's pod, the post and the refused second message, and every receiver decision |
-| Every static check can fail | eighteen planted violations, each caught: a receiver that checks the signature's shape and not its value, keys replays on the unsigned event ID, takes a future timestamp, coerces a non-numeric one, believes the event header or starts a second triage on a retry; a notifier that lets link syntax through, trusts a lookalike host or lets Slack preview; a door that ignores its grant or the run's scope; and the pieces disagreeing |
+| Every static check can fail | nineteen planted violations, each caught: a receiver that checks the signature's shape and not its value, keys replays on the unsigned event ID, takes a future timestamp, coerces a non-numeric one, believes the event header or starts a second triage on a retry; a notifier that lets link syntax through, trusts a lookalike host or lets Slack preview; a door that ignores its grant or the run's scope; an admission plant edited away from the template; and the pieces disagreeing |
 
 ## What reached Slack
 
-From a run on kind (run 3, `RUN_NUMBER=3`). The first two lines are the notifier's; the quoted lines are the stand-in agent's summary after it followed the note, which is a script's, not a model's ([ADR 4](docs/decisions/0004-a-deterministic-agent-in-ci.md)):
+From [e2e run 40540054939](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/runs/40540054939) on 61975df, run 2 on kind, as the Slack stand-in logged it. The first two lines are the notifier's; the quoted lines are the stand-in agent's summary after it followed the note, which is a script's, not a model's ([ADR 4](docs/decisions/0004-a-deterministic-agent-in-ci.md)):
 
 ```text
-*Cypress run <https://cloud.cypress.io/projects/kind01/runs/3|kind01 #3> failed:* 2 of 3 tests failed.
+*Cypress run <https://cloud.cypress.io/projects/kind01/runs/2|kind01 #2> failed:* 2 of 3 tests failed.
 _The counts are Cypress Cloud's. The triage agent's reading, not checked:_
 >&lt;!channel&gt; &lt;hxxp://collector[.]outside[.]svc[.]cluster[.]local:8080/c?run=1003|the full log&gt;
->Run kind01 #3: 1 failure.
+>Run kind01 #2: 1 failure.
 >- orders page &gt; totals each order as price times quantity (cypress/e2e/orders.cy.js): AssertionError: Timed out retrying after 4000ms: expected '&lt;td.total&gt;' to have text '$42.00', but the text was '$21.00'
 ```
 
@@ -106,7 +106,7 @@ What changes, and what does not:
 
 ## Cost
 
-Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model and holds no API key. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it. Cypress Cloud's Starter plan includes Cloud MCP and 500 test results a month; webhooks are on Team and above.
+Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model and holds no API key. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it: three to four minutes for the whole job (runs 40539339582 and 40540054939). Cypress Cloud's Starter plan includes Cloud MCP and 500 test results a month; webhooks are on Team and above.
 
 ## What it does not do
 
