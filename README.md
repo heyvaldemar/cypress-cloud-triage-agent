@@ -3,6 +3,7 @@
 [![Triage e2e](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/workflows/e2e.yml/badge.svg)](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/workflows/e2e.yml)
 [![Verify](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/workflows/verify.yml/badge.svg)](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/workflows/verify.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/heyvaldemar/cypress-cloud-triage-agent/badge)](https://scorecard.dev/viewer/?uri=github.com/heyvaldemar/cypress-cloud-triage-agent)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16001/badge)](https://www.bestpractices.dev/projects/16001)
 [![e2e, last 30 days](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fheyvaldemar%2Fcypress-cloud-triage-agent%2Fstatus%2Fbadge-days.json)](https://github.com/heyvaldemar/cypress-cloud-triage-agent/blob/status/status.json)
 [![checks](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fheyvaldemar%2Fcypress-cloud-triage-agent%2Fstatus%2Fbadge-checks.json)](https://github.com/heyvaldemar/cypress-cloud-triage-agent/blob/status/status.json)
 
