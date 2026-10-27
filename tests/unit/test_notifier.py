@@ -49,6 +49,16 @@ class DefuseTest(unittest.TestCase):
                     "HTTPS://example.net/x"):
             self.assertEqual(live_links(notifier.defuse(url)), [], url)
 
+    def test_cypress_named_after_the_real_host_is_not_cypress(self):
+        # A browser reads the host up to the first / ? # or \ ; anything after
+        # an @ there is not the host.
+        for url in ("https://example.net?x=@cloud.cypress.io/x", "https://example.net#@cloud.cypress.io/x",
+                    "https://example.net\\@cloud.cypress.io/x", "https://cloud.cypress.io:8443/x",
+                    "https://user@cloud.cypress.io/x"):
+            out = notifier.defuse(url)
+            self.assertEqual(live_links(out), [], url)
+            self.assertNotIn("example.net", out, url)
+
     def test_ampersand_cannot_build_an_entity(self):
         self.assertEqual(notifier.defuse("&lt;!channel&gt;"), "&amp;lt;!channel&amp;gt;")
 

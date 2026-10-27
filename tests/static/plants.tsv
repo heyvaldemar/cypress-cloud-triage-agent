@@ -9,7 +9,7 @@
 "manifests/receiver/receiver.py"	"if run in self.started:"	"if False:"	"receiver"	"a receiver that starts a second triage on a retry"
 "manifests/receiver/receiver.py"	"if \"accessibility\" in body or \"uiCoverage\" in body:"	"if header(headers, \"X-Cypress-Event\") != \"run.completed\":"	"receiver"	"a receiver that believes the unsigned event header"
 "manifests/notifier/notifier.py"	"return escape(URL.sub(defang_url, text))"	"return URL.sub(defang_url, text)"	"notifier"	"a notifier that lets Slack's link and mention syntax through"
-"manifests/notifier/notifier.py"	"if host in ALLOWED_HOSTS and"	"if host.startswith(\"cloud.cypress.io\") and"	"notifier"	"a notifier fooled by a lookalike host"
+"manifests/notifier/notifier.py"	"host in ALLOWED_HOSTS and default_port"	"\"cloud.cypress.io\" in host and default_port"	"notifier"	"a notifier fooled by a lookalike host"
 "manifests/notifier/notifier.py"	"\"unfurl_links\": False"	"\"unfurl_links\": True"	"notifier"	"a notifier that lets Slack fetch link previews"
 "manifests/cloud-mcp/server.py"	"outside = self.scope(g, pod, args)"	"outside = None"	"mcp"	"a door that lets the agent read any run"
 "manifests/cloud-mcp/server.py"	"if name not in TOOLS or name not in g[\"tools\"]:"	"if name not in TOOLS:"	"mcp"	"a door that lists the grant but does not enforce it on a call"

@@ -39,6 +39,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 AUDIENCE = os.environ.get("NOTIFY_AUDIENCE", "notify.triage.heyvaldemar.com")
 AGENT = os.environ.get("AGENT_IDENTITY", "system:serviceaccount:triage-agents:triage-agent")
@@ -60,13 +61,22 @@ URL = re.compile(r"(?i)\b(?:https?|ftp)://[^\s<>\"'|`]+")
 
 def defang_url(m):
     url = m.group(0)
-    # The host is after any user@ and before any :port.
-    host = re.sub(r"(?i)^[a-z]+://", "", url).split("/")[0].split("@")[-1].split(":")[0].lower()
-    if host in ALLOWED_HOSTS and url.lower().startswith("https://"):
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").rstrip(".").lower()
+        default_port = parts.port in (None, 443)
+    except ValueError:
+        parts, host, default_port = None, "", False
+    # A link survives only where every reader finds the same host in it:
+    # https, one of Cypress's hosts, the default port, and no @ or \ that a
+    # browser and this parser could split differently.
+    if (parts is not None and parts.scheme.lower() == "https" and host in ALLOWED_HOSTS and default_port
+            and "@" not in url and "\\" not in url):
         return url
+    # Everything else is broken, every dot of it, so a host hidden after a
+    # ? or # is broken too.
     scheme, _, rest = url.partition("://")
-    hostport, slash, path = rest.partition("/")
-    return scheme.lower().replace("t", "x") + "://" + hostport.replace(".", "[.]") + slash + path
+    return scheme.lower().replace("t", "x") + "://" + rest.replace(".", "[.]")
 
 
 def escape(text):

@@ -16,6 +16,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Only the timestamp and the body of a Cypress webhook are signed. A replay keyed on `X-Cypress-Event-Id`, as the docs suggest for idempotency, can be sent again with a new ID; the receiver keys replays on the signature and runs on the signed body. The event type is a header too, so the body decides it.
 - The docs' Node example computes `Number(timestamp)`, and a `NaN` passes its five-minute check. The receiver takes digits only.
+- The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
 [Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/commits/main
