@@ -1,0 +1,235 @@
+# Two walls. The first is the agents' own: nothing leaves a triage pod but
+# DNS to its own resolver and its two doors, Cloud MCP and the notifier.
+# The second belongs to the rest: the receiver and Slack refuse connections
+# from the agents' namespace, so opening the first wall by mistake does not
+# let a fooled agent start more triage or write to Slack around the
+# notifier.
+#
+# Each door is walled too: it takes calls from whom it serves and reaches
+# DNS, the API server (TokenReview, or creating a Job; that rule names the
+# API server's address, so scripts/install.sh writes it), and its one
+# upstream.
+#
+# NetworkPolicy works on addresses and ports, not on names, and DNS itself
+# can carry data out. So the agents' DNS goes to a resolver of their own
+# (agent-dns.yaml), which answers for the cluster's names and relays nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: triage-agents
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-and-doors
+  namespace: triage-agents
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agent-dns
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-dns
+      ports:
+        - {protocol: UDP, port: 1053}
+        - {protocol: TCP, port: 1053}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloud-mcp
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloud-mcp
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: notify
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifier
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The receiver: the public door. Anyone may knock, except a triage agent.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: triage
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: receiver
+  namespace: triage
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: receiver
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - {key: triage.heyvaldemar.com/agents, operator: DoesNotExist}
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: cloud-mcp
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloud-mcp
+  namespace: cloud-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloud-mcp
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              triage.heyvaldemar.com/agents: "true"
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: notify
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifier
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: notify
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notifier
+  namespace: notify
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: notifier
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              triage.heyvaldemar.com/agents: "true"
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloud-mcp
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloud-mcp
+        # On kind, Slack is the stand-in in `slack`. Against the real Slack
+        # this rule is an egress proxy that allows hooks.slack.com only.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: slack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: slack
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The second wall: Slack takes messages from the notifier and no one else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-the-notifier-only
+  namespace: slack
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: notify
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifier
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The agents' resolver takes queries from the agents' namespace only, and its
+# one way out, to the API server, is written by scripts/install.sh.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-agents-only
+  namespace: agent-dns
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              triage.heyvaldemar.com/agents: "true"
+      ports:
+        - {protocol: UDP, port: 1053}
+        - {protocol: TCP, port: 1053}

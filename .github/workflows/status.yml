@@ -1,0 +1,62 @@
+name: Status
+
+# Writes what the e2e workflow has shown lately (scripts/status.py) to the
+# branch `status`, where the README's badges and the fleet read it: green
+# days in the last 30, the streak, and the latest run's checks and
+# measurements. After every e2e run on main, and daily in case one was
+# missed. The branch holds one commit, replaced each time, so main's history
+# stays the code's and nothing here starts the e2e run again.
+on:
+  workflow_run:
+    workflows: ["Triage e2e"]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "31 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: status
+  cancel-in-progress: false
+
+jobs:
+  status:
+    name: Write the status branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Push the branch `status`.
+      contents: write
+      # Read the e2e runs and the results they uploaded.
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the e2e runs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          E2E_WORKFLOW: e2e.yml
+        run: python3 scripts/status.py "$RUNNER_TEMP/status"
+
+      - name: Replace the branch `status`
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd "$RUNNER_TEMP/status"
+          printf '# status\n\nWritten by .github/workflows/status.yml from the e2e runs on main, every day. Not edited by hand.\n' > README.md
+          git init -q -b status
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "status: $(date -u +%FT%TZ)"
+          # The credential reaches git through its environment, not its
+          # command line, which any process on the runner can read.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+            git push -q -f "https://github.com/$REPO.git" status

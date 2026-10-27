@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  The application under test: an orders page with two bugs in it on purpose.
+  The total ignores the quantity, and a customer's delivery note is shown in
+  full where the page promises to trim it. The second bug is the one that
+  matters here: the note is text a customer typed, and when the test that
+  checks it fails, Cypress puts that text into the failure message, which is
+  what a triage agent reads.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Orders</title>
+</head>
+<body>
+  <h1>Orders</h1>
+  <table>
+    <thead>
+      <tr><th>Order</th><th>Customer</th><th>Total</th><th>Delivery note</th></tr>
+    </thead>
+    <tbody id="orders"></tbody>
+  </table>
+  <script>
+    // The note column is meant to show the first 40 characters and an
+    // ellipsis; this version shows all of it.
+    function noteText(note) {
+      return note;
+    }
+
+    // Meant to be price times quantity, summed; this version drops the
+    // quantity.
+    function total(items) {
+      return items.reduce(function (sum, item) { return sum + item.price; }, 0);
+    }
+
+    fetch("orders.json")
+      .then(function (r) { return r.json(); })
+      .then(function (orders) {
+        var body = document.getElementById("orders");
+        orders.forEach(function (o) {
+          var row = document.createElement("tr");
+          row.setAttribute("data-order", o.id);
+          [o.id, o.customer, "$" + total(o.items).toFixed(2), noteText(o.note)].forEach(function (text, i) {
+            var cell = document.createElement("td");
+            cell.className = ["id", "customer", "total", "note"][i];
+            cell.textContent = text;
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+      });
+  </script>
+</body>
+</html>

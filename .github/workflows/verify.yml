@@ -1,0 +1,72 @@
+name: Verify
+
+# The checks that need no cluster: workflows and shell scripts linted, every
+# manifest valid for Kubernetes 1.37, every image by digest, every Python
+# file compiles, the webhook door's decisions, what the notifier lets reach
+# Slack, the Cloud MCP door's grants and scope, the pieces agreeing with
+# each other, and each of those checks shown the violation it exists for.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "53 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Static checks, and that each can fail
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the pinned CI images
+        run: grep -E '^[A-Z_]+=' ci-images.pins >> "$GITHUB_ENV"
+
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/mnt" -w /mnt "$ACTIONLINT_IMAGE" -color
+
+      - name: shellcheck
+        run: docker run --rm -v "$PWD:/mnt" -w /mnt "$SHELLCHECK_IMAGE" -x scripts/*.sh tests/e2e/*.sh
+
+      - name: Install the pinned tools
+        run: ./scripts/install-tools.sh >> "$GITHUB_PATH"
+
+      - name: Static checks
+        run: ./scripts/validate.sh
+
+      - name: Each check, shown its planted violation
+        run: python3 tests/static/plant_violations.py
+
+  freshness:
+    name: Pins that fell behind upstream
+    # Scheduled and manual only: a new upstream release is not actionable in
+    # an unrelated pull request. A failure lands as a workflow-failure
+    # notification, which fleet triage reads. Dependabot here watches the
+    # workflows' actions and nothing else; this watches the images, tools and
+    # CI images the stack pins (scripts/check-freshness.py).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare every pin with what upstream has released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-freshness.py

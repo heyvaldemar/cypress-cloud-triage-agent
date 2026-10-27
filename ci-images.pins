@@ -1,0 +1,8 @@
+# The container images CI runs, pinned by digest: the same binaries check
+# this repository here and on a contributor's machine.
+#
+# They live here rather than in the workflows so fleet triage can move them
+# when a tag is rebuilt or a line is superseded, with a token that cannot
+# rewrite workflows. Only KEY=VALUE lines are read.
+ACTIONLINT_IMAGE=rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+SHELLCHECK_IMAGE=koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d

@@ -1,0 +1,84 @@
+name: Triage e2e
+
+# A fresh kind cluster with the triage stack applied, and tests/e2e/run.sh
+# against it: Cypress runs the spec in its pinned image, the end of the job
+# sends the signed run.completed body, the receiver refuses every forged or
+# replayed delivery and starts one triage, the agent is fooled by a failure
+# message and reaches nothing but its two doors, and Slack gets one defused
+# message whose counts are Cypress's.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Fresh cluster, every check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned tools
+        run: ./scripts/install-tools.sh >> "$GITHUB_PATH"
+
+      - name: Create the kind cluster
+        run: kind create cluster --config kind/cluster.yaml --wait 120s
+
+      - name: Apply the triage stack
+        run: ./scripts/install.sh
+
+      - name: Run the checks
+        env:
+          E2E_RESULTS: ${{ runner.temp }}/e2e-results.json
+          RUN_NUMBER: ${{ github.run_number }}
+        run: ./tests/e2e/run.sh
+
+      - name: Keep the results for the status workflow
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: ${{ runner.temp }}/e2e-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # What each door and the agent wrote, for anyone reading a run: the
+      # signing secret and the Slack URL are never in these files.
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs
+          path: |
+            out/agent.log
+            out/receiver.log
+            out/cloud-mcp.log
+            out/notifier.log
+            out/slack.log
+            out/cypress.log
+            out/cypress-results.json
+            out/run-completed.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: What the cluster looked like
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40
+          kubectl -n triage-agents logs -l app.kubernetes.io/name=triage-agent --all-containers --tail=200 || true

@@ -1,0 +1,7 @@
+.cache/
+out/
+__pycache__/
+*.pyc
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/

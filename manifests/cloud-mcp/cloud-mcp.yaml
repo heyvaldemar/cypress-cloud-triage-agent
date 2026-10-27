@@ -1,0 +1,95 @@
+# The Cloud MCP stand-in: the triage agent's door to its run (server.py says
+# what it checks, policy.json what each caller is granted). Its Kubernetes
+# token can do one thing: ask the API server whether a caller's token is
+# genuine (system:auth-delegator, TokenReview).
+#
+# The runs it serves are the ConfigMap cloud-runs, one file per run, written
+# from a real Cypress run by scripts/load-run.sh.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-mcp
+  namespace: cloud-mcp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloud-mcp-token-review
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: cloud-mcp
+    namespace: cloud-mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-mcp
+  namespace: cloud-mcp
+  labels:
+    app.kubernetes.io/name: cloud-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloud-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloud-mcp
+    spec:
+      serviceAccountName: cloud-mcp
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: docker.io/library/python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+          command: [python3, /app/server.py]
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: MCP_POLICY, value: /app/policy.json}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: runs, mountPath: /var/lib/cloud-mcp/runs, readOnly: true}
+      volumes:
+        - name: app
+          configMap:
+            name: cloud-mcp
+        - name: runs
+          configMap:
+            name: cloud-runs
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-mcp
+  namespace: cloud-mcp
+spec:
+  selector:
+    app.kubernetes.io/name: cloud-mcp
+  ports:
+    - {name: http, port: 8080, targetPort: http}

@@ -1,0 +1,14 @@
+{
+  "audience": "cloud-mcp.triage.heyvaldemar.com",
+  "rate_limit": {"calls": 10, "seconds": 10},
+  "identities": {
+    "system:serviceaccount:triage-agents:triage-agent": {
+      "tools": ["cypress_get_failed_tests", "cypress_get_runs"],
+      "scope": "own-run"
+    },
+    "system:serviceaccount:notify:notifier": {
+      "tools": ["cypress_get_runs"],
+      "scope": "any"
+    }
+  }
+}

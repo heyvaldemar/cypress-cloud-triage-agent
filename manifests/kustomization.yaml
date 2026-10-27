@@ -1,0 +1,42 @@
+# Everything the triage stack is made of. Triage Jobs are not here: the
+# receiver starts one per failed run, from receiver/job.json.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - agent-dns.yaml
+  - admission.yaml
+  - receiver/receiver.yaml
+  - cloud-mcp/cloud-mcp.yaml
+  - notifier/notifier.yaml
+  - stand-ins/stand-ins.yaml
+  - network-policies.yaml
+configMapGenerator:
+  - name: receiver
+    namespace: triage
+    files:
+      - receiver/receiver.py
+      - receiver/job.json
+  - name: triage-agent
+    namespace: triage-agents
+    files:
+      - agent/agent.py
+  - name: cloud-mcp
+    namespace: cloud-mcp
+    files:
+      - cloud-mcp/server.py
+      - cloud-mcp/policy.json
+  - name: notifier
+    namespace: notify
+    files:
+      - notifier/notifier.py
+  - name: recorder
+    namespace: slack
+    files:
+      - stand-ins/recorder.py
+  - name: recorder
+    namespace: outside
+    files:
+      - stand-ins/recorder.py
+generatorOptions:
+  disableNameSuffixHash: true

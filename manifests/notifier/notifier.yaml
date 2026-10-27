@@ -1,0 +1,101 @@
+# The notifier: the triage agent's one way out (notifier.py says what it
+# checks and what it writes). It holds the Slack webhook URL, which
+# scripts/install.sh creates; its Kubernetes token asks TokenReview whether
+# a caller is the agent; and a second, short token, for the Cloud MCP door's
+# audience, lets it read the run's counts itself.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notifier
+  namespace: notify
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: notifier-token-review
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: notifier
+    namespace: notify
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  namespace: notify
+  labels:
+    app.kubernetes.io/name: notifier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notifier
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notifier
+    spec:
+      serviceAccountName: notifier
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notifier
+          image: docker.io/library/python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+          command: [python3, /app/notifier.py]
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: slack-url, mountPath: /var/run/secrets/slack, readOnly: true}
+            - {name: cloud-mcp-token, mountPath: /var/run/secrets/cloud-mcp, readOnly: true}
+      volumes:
+        - name: app
+          configMap:
+            name: notifier
+        # Created by scripts/install.sh, never in Git.
+        - name: slack-url
+          secret:
+            secretName: slack-webhook
+            defaultMode: 0440
+        - name: cloud-mcp-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: cloud-mcp.triage.heyvaldemar.com
+                  expirationSeconds: 600
+                  path: token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifier
+  namespace: notify
+spec:
+  selector:
+    app.kubernetes.io/name: notifier
+  ports:
+    - {name: http, port: 8080, targetPort: http}

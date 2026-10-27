@@ -1,0 +1,74 @@
+# triage: the webhook receiver, the only thing that starts a triage. It holds
+#   the signing secret.
+# triage-agents: where triage agents run, one Job per failed run. The agents
+#   label is what admission binds to and what the other namespaces refuse.
+# cloud-mcp: the agent's door to Cypress Cloud's data.
+# notify: the agent's one way out, to Slack. It holds the Slack webhook URL.
+# The three doors carry the door label: admission holds them to a pinned,
+# read-only, limited shape, since each parses what a stranger or a fooled
+# agent sends.
+#
+# slack and outside are stand-ins for what is outside the cluster on kind:
+# Slack's incoming webhook, and an address an attacker owns.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: triage
+  labels:
+    triage.heyvaldemar.com/door: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: triage-agents
+  labels:
+    triage.heyvaldemar.com/agents: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloud-mcp
+  labels:
+    triage.heyvaldemar.com/door: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: notify
+  labels:
+    triage.heyvaldemar.com/door: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slack
+  labels:
+    triage.heyvaldemar.com/stand-in: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: outside
+  labels:
+    triage.heyvaldemar.com/stand-in: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+# Who a triage agent is, to the two doors. It gets no Kubernetes API token:
+# its Job mounts two short tokens, one for each door's audience.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: triage-agent
+  namespace: triage-agents
+automountServiceAccountToken: false
