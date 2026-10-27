@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+_(no unreleased changes yet)_
+
+## [1.0.0] - 2026-10-27
+
 ### Added
 
 - The triage stack on kind: a `run.completed` receiver (`manifests/receiver/`), a door in front of Cloud MCP's tools (`manifests/cloud-mcp/`), a notifier as the agent's one way out (`manifests/notifier/`), a stand-in triage agent fooled on purpose (`manifests/agent/`), admission that holds every triage Job to the receiver's template, network policies and the agents' own resolver.
@@ -19,4 +23,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
-[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/commits/main
+[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/releases/tag/v1.0.0
