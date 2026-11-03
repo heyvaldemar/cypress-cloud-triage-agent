@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- The e2e run's measured line about the stand-in agent is plain text, `stand-in agent: 26 of 26 attempts ended as expected (kind01 #15)`, instead of a Python dict. The status branch, its badge, heyvaldemar.com/evidence and llms.txt show measured lines as written, and they showed `agent: {'agent': 'triage', ...}`.
 - The e2e run brings back its own `kubectl port-forward` to the receiver when it has exited. The port-forward exits when one forwarded connection breaks, and the receiver answers a body over 64 KiB with 413 and closes the connection without reading it. In the scheduled run on 2026-11-02 (41448273584) the tunnel was gone right after that check: the CI trigger's delivery met `Connection refused`, and the 11 checks after it failed while the stack itself was untouched. `run.sh` now checks the tunnel before each batch of requests from the runner and logs a note when it had to start it again. No check, refusal or expectation changed. Checked on a branch (41571217882, 91 checks, none failed) and with the tunnel killed on purpose before the CI trigger (41571220251: the note, then 91 checks, none failed).
 
 ## [1.0.0] - 2026-10-27

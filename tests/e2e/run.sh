@@ -265,7 +265,11 @@ for want in "receiver blocked" "slack blocked" "outside reached"; do
   esac
 done
 
-measure "agent: $(python3 -c 'import json,sys; print(next((json.loads(l)["summary"] for l in sys.stdin if "\"summary\"" in l), {}))' <out/agent.log)"
+# One plain line, as every measured line is: the site and the badges show it as
+# written, and until 2026-11-03 this one was a Python dict.
+measure "$(python3 -c 'import json,sys
+s = next((json.loads(l)["summary"] for l in sys.stdin if "\"summary\"" in l), None)
+print("stand-in agent: %d of %d attempts ended as expected (%s)" % (s["checks"] - s["failed"], s["checks"], s["run"]) if s else "stand-in agent: no summary")' <out/agent.log)"
 
 # A copy the status workflow reads (scripts/status.py), when one is asked for.
 if [ -n "${E2E_RESULTS:-}" ]; then
