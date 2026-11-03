@@ -112,18 +112,37 @@ done
 
 # --- 3 -----------------------------------------------------------------------
 step "3. the receiver: what it refuses, and the one delivery that starts a triage"
-kubectl -n triage port-forward service/receiver "$PORT:8080" >/dev/null 2>&1 &
-pf_pid=$!
-for _ in $(seq 1 30); do curl -s -o /dev/null "http://127.0.0.1:$PORT/healthz" && break; sleep 1; done
+# The runner reaches the receiver through kubectl port-forward, which exits
+# when one forwarded connection breaks. The receiver answers a body over 64 KiB
+# with 413 and closes the connection without reading it, which is the point of
+# that check; in run 41448273584 the tunnel was gone right after it, the CI
+# trigger's delivery met "Connection refused", and every check after it failed.
+# The tunnel is the test's, not the receiver's, so it is brought back before
+# each batch of requests from the runner, and the log says when it was.
+pf_start() {
+  kubectl -n triage port-forward service/receiver "$PORT:8080" >/dev/null 2>&1 &
+  pf_pid=$!
+  for _ in $(seq 1 30); do curl -s -o /dev/null "http://127.0.0.1:$PORT/healthz" && return 0; sleep 1; done
+  return 1
+}
+pf_ensure() {
+  kill -0 "$pf_pid" 2>/dev/null && curl -s -o /dev/null "http://127.0.0.1:$PORT/healthz" && return 0
+  printf '  note  the port-forward to the receiver had exited; started again\n'
+  kill "$pf_pid" 2>/dev/null
+  pf_start
+}
+pf_start
 URL="http://127.0.0.1:$PORT/webhook"
 before="$(jobs_in_namespace)"
 jobs_before="$(kubectl -n triage-agents get jobs -o name 2>/dev/null)"
 judge < <(secret | python3 tests/e2e/webhook.py before "$URL" out/run-completed.json)
 [ "$(jobs_in_namespace)" = "$before" ] && pass "none of those started a triage" \
   || fail "a refused delivery started a triage: $(kubectl -n triage-agents get jobs -o name)"
+pf_ensure
 answer="$(secret | python3 scripts/send-run.py "$URL" out/run-completed.json out/delivery.json)"
 [[ "$answer" == "HTTP 202"* ]] && pass "the CI trigger's signed delivery started a triage ($answer)" \
   || fail "the CI trigger's delivery was not accepted: $answer"
+pf_ensure
 judge < <(secret | python3 tests/e2e/webhook.py after "$URL" out/run-completed.json out/delivery.json)
 sleep 2
 # Jobs from earlier runs on the same cluster stay for an hour (ttlSecondsAfterFinished).
