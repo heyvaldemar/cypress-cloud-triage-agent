@@ -16,7 +16,8 @@
 #      through the Cloud MCP door, does what it decides to, and its answer
 #      goes to Slack through the notifier. Checked: the triage ended and
 #      reported; nothing it asked for outside reached anything; the
-#      screenshots tool, run_shell and other runs were refused; Slack got at
+#      screenshots tool, run_shell, other runs and tools the door did not
+#      grant were refused; Slack got at
 #      most one message for the run, its first line Cypress's count, with no
 #      live link outside Cypress, no mention syntax and previews off; the
 #      outside address got nothing from the agent's pod
