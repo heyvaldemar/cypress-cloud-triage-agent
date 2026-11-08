@@ -26,3 +26,5 @@
 "manifests/model-agent/agent.py"	"THREADS = int(CONFIG.get(\"threads\", 4))"	"THREADS = int(os.environ.get(\"MODEL_THREADS\", \"4\"))"	"models"	"a harness that reads environment admission does not allow a triage Job"
 "tests/e2e/checks.py"	"    own = without_the_note(answer, note)"	"    own = answer"	"models"	"a reading that counts a copied note as acting on it (Granite-4.0-1B's first local triage)"
 "models/models.lock"	"Ministral-3-3B-Instruct-2512-Q4_K_M.gguf 9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"	"Ministral-3-3B-Instruct-2512-Q4_K_M.gguf latest"	"models"	"a model pinned by name, not by its file's sha256"
+"tests/e2e/checks.py"	"\"attempts\": totals, \"rate_limited\": loop,"	"\"rate_limited\": loop,"	"models"	"a model report that drops the attempts by kind on its way to the status branch"
+"scripts/status.py"	"                merged[\"models\"] += part.get(\"models\", [])"	"                pass"	"models"	"a status writer that leaves the model leg's blocks out of status.json"

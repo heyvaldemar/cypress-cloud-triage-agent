@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- `scripts/check-models.py` also builds a model report from a triage's summary line and runs it through `scripts/status.py`: the block must reach `status.json` `latest.models` with `acted_on_the_note` and `attempts` by kind, which the site reads. Two plants: a report that drops the attempts, a status writer that drops the blocks. 29 plants, all caught.
 - The README, AGENTS.md and the threat model say what a live webhook needs, a plan with webhooks and a public HTTPS receiver, without naming a Cypress Cloud plan: which plans include webhooks is Cypress's to change, and the claim that matters is whether a delivery has arrived.
 
 ### Found while building it
