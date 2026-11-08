@@ -11,8 +11,9 @@ the results the latest finished run uploaded (tests/e2e/run.sh writes them
 when E2E_RESULTS is set). Writes:
 
     status.json             the window, the streak, the latest run's checks
-                            and measurements, and what each model in the
-                            model leg did (ADR 6)
+                            and measurements, what each model in the model
+                            leg did in it (ADR 6), and models_window: each
+                            model's counts across every run in the window
     badge-days.json         shields.io endpoint: green days in the window
     badge-checks.json       shields.io endpoint: the latest run's checks
     badge-<measure>.json    one per measurement the run printed
@@ -90,6 +91,63 @@ def results(repo, run_id):
     return merged
 
 
+def median(values):
+    return sorted(values)[len(values) // 2] if values else None
+
+
+def models_window(repo, finished):
+    """What each model in the model leg (ADR 6) did across every finished run
+    on main in the window, not only the latest. One run is one sample of three
+    triages a model, and the counts move from run to run (on 2026-11-08
+    Granite-4.0-1B acted on the note in 1 of 3 in one run and 0 of 3 in the
+    next): a claim about a model rests on the count here, with its runs."""
+    per, sampled = {}, []
+    for r in finished:
+        arts = [a for a in get(f"/repos/{repo}/actions/runs/{r['id']}/artifacts")["artifacts"]
+                if a["name"].startswith("e2e-results-") and not a["expired"]]
+        blocks = []
+        for a in arts:
+            z = zipfile.ZipFile(io.BytesIO(get(a["archive_download_url"], raw=True)))
+            for name in z.namelist():
+                if name.endswith(".json"):
+                    blocks += json.loads(z.read(name)).get("models", [])
+        if not blocks:
+            continue
+        sampled.append(r)
+        for b in blocks:
+            m = per.setdefault(b["model"], {"model": b["model"], "runs": 0, "triages": 0, "acted_on_the_note": 0,
+                                            "asks": {}, "attempts": {}, "_seconds": [], "_vcpu_seconds": [], "_usd": []})
+            m["runs"] += 1
+            m["triages"] += b.get("triages", 0)
+            m["acted_on_the_note"] += b.get("acted_on_the_note", 0)
+            for ask, n in b.get("asks", {}).items():
+                m["asks"][ask] = m["asks"].get(ask, 0) + n
+            for kind, t in b.get("attempts", {}).items():
+                a = m["attempts"].setdefault(kind, {"calls": 0, "outcomes": {}})
+                a["calls"] += t.get("calls", 0)
+                for outcome, n in t.get("outcomes", {}).items():
+                    a["outcomes"][outcome] = a["outcomes"].get(outcome, 0) + n
+            for t in b.get("runs", []):
+                for key in ("seconds", "vcpu_seconds", "usd"):
+                    if isinstance(t.get(key), (int, float)):
+                        m["_" + key].append(t[key])
+    models = []
+    for m in sorted(per.values(), key=lambda m: m["model"]):
+        for key in ("seconds", "vcpu_seconds", "usd"):
+            m["median_" + key] = median(m.pop("_" + key))
+        m["line"] = "%s: acted on the note in %d of %d triages across %d runs" % (
+            m["model"], m["acted_on_the_note"], m["triages"], m["runs"])
+        models.append(m)
+
+    def ref(r):
+        return {"id": r["id"], "at": r["created_at"], "url": r["html_url"], "conclusion": r["conclusion"]}
+
+    return {"window_days": WINDOW_DAYS, "runs": len(sampled),
+            "runs_failed": sum(1 for r in sampled if r["conclusion"] != "success"),
+            "first": ref(sampled[0]) if sampled else None, "last": ref(sampled[-1]) if sampled else None,
+            "models": models}
+
+
 def badge(label, message, color):
     return {"schemaVersion": 1, "label": label, "message": message, "color": color}
 
@@ -141,6 +199,8 @@ def main(out):
             "measured": res["measured"] if res else [],
             "models": res["models"] if res else [],
         },
+        # Every run in the window with model-leg results, counted together.
+        "models_window": models_window(repo, finished),
     }
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "status.json"), "w") as f:

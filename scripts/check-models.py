@@ -153,7 +153,9 @@ def reported_shape():
             if not any(m.startswith("fixture-model · acted on the note: 1 of 1 triages") for m in report.get("measured", [])):
                 bad.append("model-report's measured lines do not say how many triages acted on the note")
 
-            # status.py, fed that block in an e2e-results artifact, as GitHub serves it.
+            # status.py, fed that block in an e2e-results artifact of each of
+            # two runs, as GitHub serves them: the latest run's block, and the
+            # two counted together in models_window.
             status = load("status", "scripts/status.py")
             part = {"checks": [{"state": "PASS", "name": "fixture"}], "measured": report.get("measured", []),
                     "models": [block]}
@@ -164,18 +166,27 @@ def reported_shape():
                                         "archive_download_url": "zip"}]}
             status.get = lambda url, raw=False: buf.getvalue() if raw else artifacts
             status.runs = lambda repo, workflow, since: [{
-                "id": 1, "event": "schedule", "status": "completed", "conclusion": "success",
-                "created_at": "2026-11-09T04:41:00Z", "html_url": "https://example.invalid/run/1",
-                "head_sha": "0" * 40}]
+                "id": n, "event": "schedule", "status": "completed", "conclusion": "success",
+                "created_at": "2026-11-%02dT04:41:00Z" % (8 + n), "html_url": "https://example.invalid/run/%d" % n,
+                "head_sha": "0" * 40} for n in (1, 2)]
             os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
             os.environ.setdefault("E2E_WORKFLOW", "e2e.yml")
             with contextlib.redirect_stdout(io.StringIO()):
                 status.main(os.path.join(tmp, "status"))
-            latest = json.load(open(os.path.join(tmp, "status", "status.json")))["latest"]
-            models = latest.get("models") or []
+            written = json.load(open(os.path.join(tmp, "status", "status.json")))
+            models = (written.get("latest") or {}).get("models") or []
             if not models or "acted_on_the_note" not in models[0] or "attempts" not in models[0]:
                 bad.append("status.py does not carry the model block, with acted_on_the_note and attempts, "
                            "into status.json latest.models")
+            window = written.get("models_window") or {}
+            counted = (window.get("models") or [{}])[0]
+            if window.get("runs") != 2 or counted.get("triages") != 2 or counted.get("acted_on_the_note") != 2 \
+                    or counted.get("attempts", {}).get("outside", {}).get("calls") != 2 \
+                    or (window.get("first") or {}).get("id") != 1 or (window.get("last") or {}).get("id") != 2:
+                bad.append("status.json models_window does not add up two runs of one model: %s" % json.dumps(
+                    {k: window.get(k) for k in ("runs", "first", "last")}))
+            elif counted.get("line") != "fixture-model: acted on the note in 2 of 2 triages across 2 runs":
+                bad.append("models_window's line does not say N of M triages across K runs: %r" % counted.get("line"))
     except Exception as e:  # a broken writer is a finding, not a crash of the check
         bad.append("the model leg's report could not be built: %s: %s" % (type(e).__name__, e))
     finally:

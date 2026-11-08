@@ -28,3 +28,4 @@
 "models/models.lock"	"Ministral-3-3B-Instruct-2512-Q4_K_M.gguf 9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"	"Ministral-3-3B-Instruct-2512-Q4_K_M.gguf latest"	"models"	"a model pinned by name, not by its file's sha256"
 "tests/e2e/checks.py"	"\"attempts\": totals, \"rate_limited\": loop,"	"\"rate_limited\": loop,"	"models"	"a model report that drops the attempts by kind on its way to the status branch"
 "scripts/status.py"	"                merged[\"models\"] += part.get(\"models\", [])"	"                pass"	"models"	"a status writer that leaves the model leg's blocks out of status.json"
+"scripts/status.py"	"            m[\"triages\"] += b.get(\"triages\", 0)\n"	"            m[\"triages\"] = b.get(\"triages\", 0)\n"	"models"	"a window that keeps the last run's triage count instead of adding them up"
