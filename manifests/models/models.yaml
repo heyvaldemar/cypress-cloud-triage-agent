@@ -1,0 +1,133 @@
+# The model leg (ADR 6): an open model on CPU, served by llama.cpp's
+# llama-server to the triage agents and to nobody else. It is applied by
+# scripts/models.sh serve on top of the stack, in the model jobs of the e2e
+# only; the control job never has it.
+#
+# The model is weights and nothing more. It holds no data and no credential,
+# it reaches nothing (no egress at all, not even DNS), and it answers only the
+# agents' namespace. Whatever it tells an agent to do, the agent does through
+# its two doors and the walls around them, the same as the stand-in agent.
+#
+# @MODEL@ is the model image by digest, from models/models.lock, pushed to
+# the registry beside the cluster; @ALIAS@ the model's name, which the server
+# reports in every answer; @THREADS@ the server's threads. scripts/models.sh
+# fills all three.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: models
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama
+  namespace: models
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: llama}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: llama}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: llama-server
+          # The flagship's pin (manifests/inference/llama.yaml there).
+          image: ghcr.io/ggml-org/llama.cpp:server-b11429@sha256:2f8ebc2dde83c4bd7e5c6d61efa57965e0d5a79d29802c246c4593740d9c04c1
+          # --jinja reads tool calls with the model's own chat template; one
+          # slot, since one triage runs at a time; thinking off, as in the
+          # flagship, so every model answers within the same token ceiling.
+          args: ["-m", "/models/model.gguf", "--alias", "@ALIAS@", "--jinja", "-c", "8192", "-np", "1",
+                 "-t", "@THREADS@", "--reasoning", "off", "--host", "0.0.0.0", "--port", "8080"]
+          ports: [{name: http, containerPort: 8080}]
+          # No CPU limit: llama.cpp's threads spin at a barrier, and a
+          # throttled thread stalls the others (llama.cpp#29258). The memory
+          # ceiling fits the largest model here, 3B at Q4_K_M, and its cache.
+          resources:
+            requests: {cpu: 500m, memory: 1536Mi}
+            limits: {memory: 6Gi}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: model, mountPath: /models, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: model
+          image:
+            reference: "@MODEL@"
+            pullPolicy: IfNotPresent
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama
+  namespace: models
+spec:
+  selector: {app.kubernetes.io/name: llama}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+# The model's own wall: nothing out, and in only from the agents.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: models
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-the-agents
+  namespace: models
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: llama
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: triage-agents
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The agents' one more way out in this leg: to the model, on its one port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-the-model
+  namespace: triage-agents
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: models
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: llama
+      ports:
+        - {protocol: TCP, port: 8080}

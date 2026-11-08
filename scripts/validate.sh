@@ -15,6 +15,9 @@
 #                 audiences are the same in admission, the Job template, the
 #                 doors and their manifests, and admission's two image
 #                 digests are the template's
+#   models        the model leg (ADR 6): how a model's acts are read
+#                 (tests/unit/test_model_reading.py), and the leg's walls,
+#                 harness and pins (scripts/check-models.py)
 #
 # With no arguments every check runs. tests/static/plants.tsv shows each
 # check the violation it exists for (tests/static/plant_violations.py).
@@ -35,7 +38,7 @@ check_kubeconform() {
   kubectl kustomize manifests >out/manifests.yaml || return 1
   kubeconform -strict -summary -output text -kubernetes-version "$KUBE_VERSION" \
     -cache .cache/kubeconform -schema-location "$K8S_SCHEMAS" \
-    out/manifests.yaml manifests/receiver/job.json tests/e2e/plants
+    out/manifests.yaml manifests/receiver/job.json tests/e2e/plants manifests/models/models.yaml
 }
 
 check_plants() { python3 tests/e2e/plants.py --check; }
@@ -44,7 +47,8 @@ check_images() {
   # tests/e2e/plants is left out on purpose: one plant is a tag-only image.
   local bad
   bad="$(grep -rnE '(image:|"image":|^[A-Z]+=)[[:space:]]*"?[a-z0-9.-]+(\.[a-z]+)?/[^@[:space:]"]+:[^@[:space:]"]+("|$|[[:space:]])' \
-    manifests kind tests/e2e/run.sh .github/workflows 2>/dev/null | grep -v '@sha256:' || true)"
+    manifests kind tests/e2e/run.sh tests/e2e/models.sh scripts/models.sh .github/workflows 2>/dev/null \
+    | grep -v '@sha256:' || true)"
   if [ -n "$bad" ]; then echo "images without a digest:"; echo "$bad"; return 1; fi
   echo "every image is referenced by digest"
 }
@@ -61,6 +65,11 @@ check_python() {
 check_receiver() { python3 tests/unit/test_receiver.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
 check_notifier() { python3 tests/unit/test_notifier.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
 check_mcp() { python3 tests/unit/test_cloud_mcp.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
+check_models() {
+  python3 tests/unit/test_model_reading.py 2>&1 | tail -3
+  [ "${PIPESTATUS[0]}" -eq 0 ] || return 1
+  python3 scripts/check-models.py
+}
 
 check_agreement() {
   python3 - <<'PY'
@@ -105,7 +114,7 @@ PY
 }
 
 checks=("$@")
-[ ${#checks[@]} -eq 0 ] && checks=(kubeconform plants images python receiver notifier mcp agreement)
+[ ${#checks[@]} -eq 0 ] && checks=(kubeconform plants images python receiver notifier mcp agreement models)
 failed=0
 for c in "${checks[@]}"; do
   if "check_$c"; then echo "-- $c: ok"; else echo "-- $c: FAILED"; failed=1; fi

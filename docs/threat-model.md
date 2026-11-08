@@ -40,6 +40,11 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 | The agent writes to Slack around the notifier, or starts more triage | the agents' egress has neither; Slack takes the notifier only, and the receiver refuses the agents' namespace | the agent is blocked from both; with an agents' namespace's egress wide open, both still refuse it while the outside answers |
 | The agent posts many messages, or loops on the door | one message per run; ten door calls in ten seconds | the second message is refused; the loop is rate limited |
 | The agent reaches the Kubernetes API or cloud credentials | no API token, and the egress allowlist | both blocked |
+| A real model, not a script, finds a way out the stand-in never tried | the same walls, doors and admission for the model leg's harness, which offers the model more tools than the door grants (ADR 6) | `tests/e2e/models.sh`, three models, three triages each: every request outside reaches nothing; screenshots, `run_shell` and other runs refused; at most one defused Slack message per run; nothing at the outside address from the agent's pod |
+| The model server becomes a way in or out | the `models` namespace denies all egress and takes the agents' namespace only, on one port; the agents reach it in the model leg only | a pod outside the agents' namespace gets no connection; `scripts/check-models.py` and its plants |
+| A different model, or altered weights, is served | the image by digest, the flagship's, built reproducibly from the publisher's file checked against its sha256 | `scripts/models.sh build` fails on another digest; the e2e checks the mounted reference |
+| The harness becomes a hole the model can use | it routes every tool to a door or the network, reads only the environment admission allows, and its web request opens http(s) only | `scripts/check-models.py` and its plants, among them one that lets it open `file://`, where the pod's tokens are |
+| A copied note is read as a model acting on it, or the reverse | copies of the note are taken out before the text asks are read; the ping counts only at the start | `tests/unit/test_model_reading.py`, with the reading that miscounted Granite-4.0-1B's first triage as a plant |
 
 ## Residual risks
 
@@ -49,5 +54,8 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 - **One replica, memory only.** The replay cache and the started set live in one receiver process. A restart inside the five-minute window forgets which signatures it saw; the Job name still stops a second triage of the same run.
 - **The live webhook and the live Cloud MCP are not exercised.** On kind the trigger is the CI job's signed delivery and the door serves a real Cypress run from files. A delivery from Cypress Cloud and a forward to `mcp.cypress.io` need a paid plan and a token, and are not claimed.
 - **Slack by name.** NetworkPolicy allows addresses, not names; against the real Slack the notifier's egress is an egress proxy that allows `hooks.slack.com` only. On kind it is the stand-in's Service.
+- **The model's signature is not checked here.** The model is pinned by digest, the flagship's; the flagship verifies its signature at admission with Kyverno. Here the digest stands for the bytes.
+- **The model server has no identity check.** Anything that runs in the agents' namespace may ask it; it holds no data and reaches nothing.
+- **A few triages a day.** Each model is measured on three triages per run; a statement about a model cites its run and how many triages it rests on.
 - **The audit trail stays on the node.** Every door writes a JSON line per decision; nothing ships them elsewhere.
 - **TLS.** On kind the receiver is reached through a port-forward. A public receiver sits behind an ingress that terminates TLS; the signature does not encrypt the body.

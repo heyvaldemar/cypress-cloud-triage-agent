@@ -11,7 +11,8 @@ the results the latest finished run uploaded (tests/e2e/run.sh writes them
 when E2E_RESULTS is set). Writes:
 
     status.json             the window, the streak, the latest run's checks
-                            and measurements
+                            and measurements, and what each model in the
+                            model leg did (ADR 6)
     badge-days.json         shields.io endpoint: green days in the window
     badge-checks.json       shields.io endpoint: the latest run's checks
     badge-<measure>.json    one per measurement the run printed
@@ -74,7 +75,7 @@ def results(repo, run_id):
             if a["name"].startswith("e2e-results") and not a["expired"]]
     if not arts:
         return None
-    merged = {"checks": [], "measured": []}
+    merged = {"checks": [], "measured": [], "models": []}
     for a in arts:
         z = zipfile.ZipFile(io.BytesIO(get(a["archive_download_url"], raw=True)))
         for name in z.namelist():
@@ -84,6 +85,8 @@ def results(repo, run_id):
                 for c in part.get("checks", []):
                     merged["checks"].append(dict(c, job=job) if job else c)
                 merged["measured"] += part.get("measured", [])
+                # The model leg's jobs (ADR 6) add what each model did, by triage.
+                merged["models"] += part.get("models", [])
     return merged
 
 
@@ -136,6 +139,7 @@ def main(out):
             "checks_failed": failed,
             "checks": checks,
             "measured": res["measured"] if res else [],
+            "models": res["models"] if res else [],
         },
     }
     os.makedirs(out, exist_ok=True)

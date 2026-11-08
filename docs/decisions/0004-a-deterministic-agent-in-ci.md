@@ -1,6 +1,6 @@
 # 4. A deterministic stand-in agent in CI, not a model
 
-- Status: accepted
+- Status: accepted, amended by [ADR 6](0006-open-models-beside-the-control.md)
 - Date: 2026-10-27
 
 ## Context
@@ -19,7 +19,7 @@ The triage agent (`manifests/agent/agent.py`) is a script that behaves like a fo
 
 ## Alternatives
 
-- **A small local model on CPU.** Realistic, slow, and non-deterministic; it would make the e2e run flaky for no gain in what it proves.
+- **A small local model on CPU.** Realistic, slow, and non-deterministic; it would make the e2e run flaky for no gain in what it proves. ADR 6 adds it beside this agent, not in its place: what a model does is measured, and only the walls are checked, so its answers changing cannot make the run flaky.
 - **Claude, or another hosted model, through the same doors.** The way a team would run it, and worth measuring. It belongs in its own workflow with its own budget, not in the e2e run that gates every change.
 
 ## How to explain this to a customer

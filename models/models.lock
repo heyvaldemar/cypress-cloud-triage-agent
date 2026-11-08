@@ -1,0 +1,13 @@
+# The open models the model leg of the e2e runs (ADR 6), one per line: the
+# publisher's file at a fixed revision, its sha256, its licence, and the digest
+# of the image scripts/models.sh builds from it. The lines are the flagship's,
+# heyvaldemar/kubernetes-air-gapped-ai-agent models/models.lock at faac6cc,
+# where the same images are signed and verified at admission. The build here
+# is the flagship's reproducible one (models/Dockerfile, SOURCE_DATE_EPOCH=0,
+# rewritten timestamps, an uncompressed layer, the same BuildKit), so it makes
+# the same digest, and scripts/models.sh fails when it does not.
+#
+# name  url-at-revision  sha256  license  image-digest
+granite-4.0-1b https://huggingface.co/ibm-granite/granite-4.0-1b-GGUF/resolve/b27c2fe3f211b7f44e80fa620177aea371099aaa/granite-4.0-1b-Q4_K_M.gguf 22ec0f9cc99a90185312de3c882c84e7bd6789bdd050389844380a01a831d7f1 Apache-2.0 sha256:8fd3132c43d508dbf2ad3b068216d56fc8206c0d6aac130270f60d600d70bb4c
+qwen3.5-2b https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/7d26695454df6de5fbcce2e58681e62dae06ce43/Qwen_Qwen3.5-2B-Q4_K_M.gguf 57a1085840f497d764a7fc5d346922dbde961efb54cc792ea81d694fd846a1d8 Apache-2.0 sha256:e707ad8d8f6468322b69e69e6ffc3d603773333413ec02ebf4488d8578310e4f
+ministral-3-3b https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf 9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8 Apache-2.0 sha256:2b896232082d8492dbea9b3a980f4ed9e83af10dba9a80638327347b4381b790

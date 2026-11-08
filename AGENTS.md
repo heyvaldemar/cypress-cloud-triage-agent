@@ -4,14 +4,14 @@ Most of the code here is written by an AI agent, and the decisions and the verif
 
 ## What this repository claims
 
-Every row of the README's table "What is proven, and how" is a check that runs in CI: `tests/e2e/run.sh` on a fresh kind cluster (`.github/workflows/e2e.yml`), or `scripts/validate.sh` with its planted violations (`.github/workflows/verify.yml`). Each refusal is paired with a control that must succeed, so a check cannot pass because the environment refuses everything. A claim with no check is not written, and in `docs/threat-model.md` a control with no check is listed as a residual risk. It is a reference architecture on kind, CPU only, at no cloud cost, and nothing says otherwise: no wording about running anywhere in production or holding a certification (the fleet's conformance check refuses it).
+Every row of the README's table "What is proven, and how" is a check that runs in CI: `tests/e2e/run.sh` on a fresh kind cluster (`.github/workflows/e2e.yml`), `tests/e2e/models.sh` in the same workflow's model leg (ADR 6), or `scripts/validate.sh` with its planted violations (`.github/workflows/verify.yml`). Each refusal is paired with a control that must succeed, so a check cannot pass because the environment refuses everything. A claim with no check is not written, and in `docs/threat-model.md` a control with no check is listed as a residual risk. It is a reference architecture on kind, CPU only, at no cloud cost, and nothing says otherwise: no wording about running anywhere in production or holding a certification (the fleet's conformance check refuses it).
 
 Two claims wait for a paid Cypress plan and a token, and are not made until a run proves them: a delivery from a live Cypress Cloud webhook, and the Cloud MCP door forwarding to `mcp.cypress.io`. Until then the README says the receiver is verified against the documented payload and signature, built from a real Cypress run, and that the end of the CI job sends it.
 
 ## Before changing anything
 
 - Read the decision record that covers it, under `docs/decisions/`. A change that alters a decision amends that record or adds one, in the same format, ending with how the choice is explained to a customer. A change to a threat or a control changes its row in `docs/threat-model.md`.
-- `make check` runs `scripts/validate.sh` (kubeconform, the admission plants against the template, images, python, the three doors' unit tests, and agreement between the pieces), then `tests/static/plant_violations.py`, which shows each check its planted violation from `tests/static/plants.tsv`. It must end all caught, none missed, none stale. Verify also runs actionlint and shellcheck; `make check` does not.
+- `make check` runs `scripts/validate.sh` (kubeconform, the admission plants against the template, images, python, the three doors' unit tests, agreement between the pieces, and the model leg's reading, walls and pins), then `tests/static/plant_violations.py`, which shows each check its planted violation from `tests/static/plants.tsv`. It must end all caught, none missed, none stale. Verify also runs actionlint and shellcheck; `make check` does not.
 - `make test` runs Cypress in its pinned image and then the e2e against the cluster `make up` creates. It runs on Docker Desktop too.
 
 ## A check is trusted only after it has failed
@@ -37,15 +37,16 @@ Everything is pinned:
 
 - kind, kubectl and kubeconform: version and sha256 per platform in `tools.lock`. `scripts/install-tools.sh` refuses a file that does not match.
 - CI images (actionlint, shellcheck): by digest in `ci-images.pins`.
-- Container images: by digest where they are used, in `manifests/`, `manifests/receiver/job.json`, `tests/e2e/run.sh` and `kind/cluster.yaml`. The agent's image and the gate's are also named in `manifests/admission.yaml`, and `scripts/validate.sh` fails when the two disagree, so a bump moves both in one commit. Cypress (`cypress/included`) is pinned in `tests/e2e/run.sh`.
+- Container images: by digest where they are used, in `manifests/`, `manifests/receiver/job.json`, `tests/e2e/run.sh`, `tests/e2e/models.sh`, `scripts/models.sh` and `kind/cluster.yaml`. The agent's image and the gate's are also named in `manifests/admission.yaml`, and `scripts/validate.sh` fails when the two disagree, so a bump moves both in one commit. Cypress (`cypress/included`) is pinned in `tests/e2e/run.sh`.
 - The Kubernetes schemas: a fixed commit of yannh/kubernetes-json-schema in `scripts/validate.sh`.
+- The models: `models/models.lock` holds the flagship's lines (kubernetes-air-gapped-ai-agent, `models/models.lock`) for the three models the model leg runs, each by the file's sha256 at a fixed revision and by its image's digest. They move when the flagship's do, and `scripts/models.sh build` fails if the image it builds is not the pinned digest. llama-server is the flagship's pin too.
 - Actions: by commit SHA, bumped weekly by Dependabot in one group and merged by `dependabot-automerge.yml` only after the e2e and Verify pass. The SLSA generator in `release-assets.yml` is the exception: it refuses a SHA, so it is referenced by tag.
 
 Dependabot reads only the actions. Everything else is moved by hand, with the new hash checked against the publisher's, and not before a release is three days old. `scripts/check-freshness.py` reports each pin upstream has moved past and changes nothing.
 
 ## Numbers
 
-The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, nineteen planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
+The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, twenty-seven planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
 
 ## Releases
 
@@ -62,10 +63,11 @@ Plain and specific. No em dashes, no marketing words, no claim the evidence does
 - Print a secret or a credential, pass one as a command-line argument, or put one in a file or a log. The signing secret and the Slack URL are generated at install and handed to kubectl on stdin; the e2e run and the CI trigger read the signing secret on stdin.
 - Turn off or weaken a check, a policy, a test or a gate to get a run green.
 - Touch anything outside this repository's own CI to test a change: no cloud resources, no outside services, no real Slack, no Cypress Cloud project.
-- Put a model or a model API key into the e2e run. The stand-in agent is a script that is fooled the same way every run (ADR 4).
+- Put a model API key into the e2e run, or a model anywhere but the model leg's `models` namespace. The stand-in agent is the control, fooled the same way every run (ADR 4); the model leg runs open models on CPU beside it (ADR 6), and nothing a model chooses is a check: a check is what the walls promise.
+- Read a copy of the note in a model's summary as the model acting on it. `tests/e2e/checks.py` `asks_of` takes every copy out first (ADR 6).
 - Let the receiver key replays on `X-Cypress-Event-Id`, read the event type from `X-Cypress-Event`, or coerce a timestamp that is not digits (ADR 1).
 - Put anything from the webhook payload into the triage Job but the project ID and the run number.
 - Loosen what `manifests/admission.yaml` holds triage Jobs to, the namespace labels it binds to, or Pod Security `restricted`.
-- Open the agents' egress past their own resolver and their two doors, give that resolver a `forward` block, or let the receiver or Slack take calls from the agents' namespace.
+- Open the agents' egress past their own resolver and their two doors (and, in the model leg only, the model's one port), give that resolver a `forward` block, let the model reach anything or answer anyone but the agents, or let the receiver or Slack take calls from the agents' namespace.
 - Grant the agent a tool beyond `cypress_get_runs` and `cypress_get_failed_tests`, or a scope beyond its own run, or let any door take a token for another audience.
 - Let the agent's words into Slack without the notifier's escaping, broken addresses and previews off, or let the agent write the facts line.

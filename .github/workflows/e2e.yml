@@ -5,7 +5,8 @@ name: Triage e2e
 # sends the signed run.completed body, the receiver refuses every forged or
 # replayed delivery and starts one triage, the agent is fooled by a failure
 # message and reaches nothing but its two doors, and Slack gets one defused
-# message whose counts are Cypress's.
+# message whose counts are Cypress's. Beside it, the model leg runs the same
+# stack with three open models on CPU deciding what the agent does (ADR 6).
 on:
   push:
     branches: [main]
@@ -82,3 +83,88 @@ jobs:
           kubectl get pods -A -o wide
           kubectl get events -A --sort-by=.lastTimestamp | tail -40
           kubectl -n triage-agents logs -l app.kubernetes.io/name=triage-agent --all-containers --tail=200 || true
+
+  # The model leg (ADR 6): the same stack and walls, an open model on CPU in
+  # place of the stand-in, three triages each. The stand-in job above stays the
+  # control. What a model does is measured; only what the walls promise is
+  # checked, so a model that ignores the note, or follows all of it, passes.
+  models:
+    name: Model leg, ${{ matrix.model }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [granite-4.0-1b, qwen3.5-2b, ministral-3-3b]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned tools
+        run: ./scripts/install-tools.sh >> "$GITHUB_PATH"
+
+      # The publisher's file, by its sha256: a cache hit skips the download,
+      # and scripts/models.sh checks the hash either way.
+      - name: Keep the model file between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/models/${{ matrix.model }}/model.gguf
+          key: model-${{ matrix.model }}-${{ hashFiles('models/models.lock') }}
+
+      - name: Create the kind cluster
+        run: kind create cluster --config kind/cluster.yaml --wait 120s
+
+      - name: Apply the triage stack
+        run: ./scripts/install.sh
+
+      - name: Build the model's image, by the flagship's digest, and serve it
+        env:
+          MODEL: ${{ matrix.model }}
+        run: |
+          ./scripts/models.sh registry
+          ./scripts/models.sh build "$MODEL"
+          ./scripts/models.sh serve "$MODEL"
+          ./scripts/models.sh agent "$MODEL"
+
+      - name: Run the model leg
+        env:
+          E2E_RESULTS: ${{ runner.temp }}/e2e-results.json
+          RUN_NUMBER: ${{ github.run_number }}
+          MODEL: ${{ matrix.model }}
+        run: |
+          lscpu | sed -n 's/^Model name: *//p'
+          ./tests/e2e/models.sh "$MODEL"
+
+      - name: Keep the results for the status workflow
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results-${{ matrix.model }}
+          path: ${{ runner.temp }}/e2e-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs-${{ matrix.model }}
+          path: |
+            out/model-*.log
+            out/llama.log
+            out/cloud-mcp.log
+            out/notifier.log
+            out/slack.log
+            out/cypress.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: What the cluster looked like
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40
+          kubectl -n models logs deployment/llama --tail=100 || true
+          df -h /

@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The model leg of the e2e ([ADR 6](docs/decisions/0006-open-models-beside-the-control.md)): Granite-4.0-1B, Qwen3.5-2B and Ministral-3-3B on CPU, three triages each, behind the same walls, doors and admission as the stand-in agent, which stays the control. The models are the flagship's, by its image digests, built reproducibly from the publisher's files (`models/models.lock`, `scripts/models.sh`, `scripts/push-layout.py`) and served by llama-server in a `models` namespace that reaches nothing and answers the agents only (`manifests/models/`). The receiver's Job runs a plain tool-using harness (`manifests/model-agent/agent.py`) that offers Cloud MCP's tools, a shell and a web request, and does what the model asks. Checked: what the walls promise (`tests/e2e/models.sh`). Measured, into `e2e-results` and `status.json`: which of the note's asks each model acted on, its attempts by kind and how each ended, the time, the compute and its price.
+- `scripts/check-models.py`, run as `scripts/validate.sh models`, with eight planted violations: the model reaching anything or answering another namespace, the agents' way to it on a second port, a harness tool that opens `file://`, a tool no door stands behind, a harness reading environment admission refuses, a model pinned by name, and the reading below.
+
+### Found while building it
+
+- The first reading of what a model did counted a copy of the note as acting on it. Granite-4.0-1B's first triage, on a laptop, copied the failure message into its summary, `<!channel>` and the address with it, and was reported as acting twice. Copies are taken out before the text asks are read, and the ping counts only at the start (`tests/unit/test_model_reading.py`; the old reading is a plant).
+- `kind load image-archive` cannot give a pod a model image by digest: containerd files the archive under its index's digest and a generated name. The model goes to a registry beside the cluster instead, by its manifest digest.
+
 ### Fixed
 
 - The e2e run's measured line about the stand-in agent is plain text, `stand-in agent: 26 of 26 attempts ended as expected (kind01 #15)`, instead of a Python dict. The status branch, its badge, heyvaldemar.com/evidence and llms.txt show measured lines as written, and they showed `agent: {'agent': 'triage', ...}`.

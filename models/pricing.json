@@ -1,0 +1,4 @@
+{
+ "_source": "AWS EC2 on-demand list price of c7i.large (2 vCPU, Linux, us-east-1), $0.0892 an hour, per Holori's snapshot of 2026-07-16 (https://calculator.holori.com/aws/ec2/c7i.large/us-east-1). Check AWS's own price list before quoting it. The same price the flagship uses (evals/pricing.json there), so a task here and a task there are priced alike.",
+ "usd_per_vcpu_hour": 0.0446
+}
