@@ -13,7 +13,7 @@ A failing Cypress test is untrusted input to the AI agent that triages it. The f
 
 A signed `run.completed` delivery starts one triage per failed run. The agent reads its run, and no other, through a door in front of Cypress Cloud's MCP tools. It posts once, through a notifier that writes Cypress's own counts above the agent's words and defuses what the agent wrote. The agent holds no Cypress, Slack or Kubernetes credential, and the API server refuses any Job in its namespace that is not the receiver's template.
 
-It is a reference, not a product, and it does not run in production anywhere. It runs on kind, CPU only, at no cloud cost. **A live Cypress Cloud webhook needs the Team plan or above; here the receiver is verified against the payload and signature the docs describe, built from a real Cypress run, and the end of the CI job sends it.** The day a project has webhooks, that CI step is deleted and nothing in the cluster changes ([ADR 1](docs/decisions/0001-a-signed-run-completed-as-the-trigger.md)).
+It is a reference, not a product, and it does not run in production anywhere. It runs on kind, CPU only, at no cloud cost. **A live Cypress Cloud webhook needs a plan with webhooks and a public HTTPS receiver; until one has delivered, the receiver is verified against the documented, signed payload, built from a real Cypress run, and the end of the CI job triggers the triage.** The day a project has webhooks, that CI step is deleted and nothing in the cluster changes ([ADR 1](docs/decisions/0001-a-signed-run-completed-as-the-trigger.md)).
 
 ## What is proven, and how
 
@@ -59,7 +59,7 @@ sent with `"unfurl_links": false, "unfurl_media": false`. The agent was told to 
 ```mermaid
 flowchart LR
   ci[CI job: cypress run, then a signed run.completed] -->|HTTPS| receiver
-  cloud[Cypress Cloud webhook, Team plan] -.->|the same body and signature| receiver
+  cloud[Cypress Cloud webhook, on a plan with webhooks] -.->|the same body and signature| receiver
   subgraph triage[triage]
     receiver[receiver: signature, window, replay, once per run]
   end
@@ -114,7 +114,7 @@ What changes, and what does not:
 
 ## Cost
 
-Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model, the model leg's models run on the runner's CPU, and nothing holds an API key. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it: three to four minutes for the stand-in job (runs 40539339582 and 40540054939), and one more runner per model. A triage's compute is priced in `status.json` at the flagship's rate per vCPU-hour (`models/pricing.json`), for comparison: on a public repository's runner nothing is billed. Cypress Cloud's Starter plan includes Cloud MCP and 500 test results a month; webhooks are on Team and above.
+Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model, the model leg's models run on the runner's CPU, and nothing holds an API key. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it: three to four minutes for the stand-in job (runs 40539339582 and 40540054939), and one more runner per model. A triage's compute is priced in `status.json` at the flagship's rate per vCPU-hour (`models/pricing.json`), for comparison: on a public repository's runner nothing is billed. Cloud MCP is on every Cypress Cloud plan; webhooks are not, and need a receiver Cypress Cloud can reach over HTTPS.
 
 ## What it does not do
 

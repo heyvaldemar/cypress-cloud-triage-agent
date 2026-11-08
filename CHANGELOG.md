@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - [ADR 7](docs/decisions/0007-spec-jobs-walled-like-the-agent.md), proposed: the walls for layer 2's spec Jobs, written before they are built. The spec Job never holds the webhook signing secret; a results door signs its run's results.
 
+### Changed
+
+- The README, AGENTS.md and the threat model say what a live webhook needs, a plan with webhooks and a public HTTPS receiver, without naming a Cypress Cloud plan: which plans include webhooks is Cypress's to change, and the claim that matters is whether a delivery has arrived.
+
 ### Found while building it
 
 - The first reading of what a model did counted a copy of the note as acting on it. Granite-4.0-1B's first triage, on a laptop, copied the failure message into its summary, `<!channel>` and the address with it, and was reported as acting twice. Copies are taken out before the text asks are read, and the ping counts only at the start (`tests/unit/test_model_reading.py`; the old reading is a plant).
