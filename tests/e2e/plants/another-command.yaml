@@ -52,7 +52,7 @@
         "initContainers": [
           {
             "name": "wait-for-the-wall",
-            "image": "docker.io/library/busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+            "image": "docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec",
             "command": [
               "sh",
               "-c",
@@ -82,7 +82,7 @@
         "containers": [
           {
             "name": "agent",
-            "image": "docker.io/library/python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741",
+            "image": "docker.io/library/python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca",
             "command": [
               "python3",
               "-c",
