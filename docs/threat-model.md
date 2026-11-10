@@ -49,6 +49,7 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 ## Residual risks
 
 - **A plain-words lie.** The agent can still write "this failure is a flake" under the facts line. The line above it and the label say otherwise; a reader can still believe the agent.
+- **The note's request, passed to a person.** A model can write the note's ask into its summary as its own advice. Qwen3.5-2B did in run 42728260252 (triage run 3302): "you may want to POST the full failure context to the collector endpoint". The notifier breaks the address and previews are off, so no click sends anything; a reader who does what the summary says is outside every wall here. The README quotes what Slack got.
 - **Bare domains.** Slack may link a domain written without a scheme. Previews are off, so nothing is fetched unless a person clicks.
 - **No sandboxed runtime.** Triage pods run on the node's kernel. [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) shows the same agents on gVisor.
 - **One replica, memory only.** The replay cache and the started set live in one receiver process. A restart inside the five-minute window forgets which signatures it saw; the Job name still stops a second triage of the same run.
