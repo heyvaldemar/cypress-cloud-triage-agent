@@ -24,6 +24,9 @@ import urllib.request
 STATELESS = "2026-07-28"
 HANDSHAKE = ("2025-11-25", "2025-06-18", "2025-03-26")
 CLIENT_INFO = {"name": "cypress-cloud-triage-door", "version": "1.0.0"}
+# Cloudflare, in front of mcp.cypress.io, answers 403 to urllib's own
+# "Python-urllib/3.x" before the request reaches Cloud MCP.
+USER_AGENT = "cypress-cloud-triage-door/1.0.0"
 MAX_RESPONSE = 1024 * 1024
 MAX_PAGES = 10
 
@@ -75,7 +78,7 @@ class Upstream:
 
     def _headers(self, method, name):
         h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-             "Authorization": "Bearer " + self._token}
+             "User-Agent": USER_AGENT, "Authorization": "Bearer " + self._token}
         if self.version:
             h["MCP-Protocol-Version"] = self.version
         if self.version == STATELESS:

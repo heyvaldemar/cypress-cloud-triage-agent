@@ -65,6 +65,10 @@ class Recorder(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         msg = json.loads(raw)
         cls = type(self)
+        if (self.headers.get("User-Agent") or "").startswith("Python-urllib"):
+            # What Cloudflare in front of mcp.cypress.io answers urllib's own
+            # User-Agent, before Cloud MCP sees the request.
+            return self.reply(403, b"error code: 1010", "text/plain")
         cls.seen.append({"method": msg.get("method"), "auth": self.headers.get("Authorization"),
                          "session": self.headers.get("Mcp-Session-Id"),
                          "version": self.headers.get("MCP-Protocol-Version")})
