@@ -23,7 +23,7 @@ On kind there is no Cypress Cloud, so the door serves runs from files written fr
 ## Consequences
 
 - A fooled agent reads its own run's failures and summary, and nothing else in the organisation.
-- The live forward to `mcp.cypress.io` is [ADR 8](0008-the-live-leg.md): one tool function per granted tool, the token as a Secret in the door's namespace, and an egress rule to Cypress, built together and proven daily by the live job.
+- The live forward to `mcp.cypress.io` is [ADR 8](0008-the-live-leg.md): one tool function per granted tool, the token as a Secret in the door's namespace, and an egress rule to Cypress, built together and proven by the live job, scheduled daily.
 - Cloud MCP has no write tools today. If it gains one, the grant decides whether the agent sees it; it is not granted by default.
 
 ## Alternatives

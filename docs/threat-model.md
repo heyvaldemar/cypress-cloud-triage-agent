@@ -2,7 +2,7 @@
 
 What the triage stack defends against when a failing test talks its agent into misbehaving, the control for each threat, and the check that proves it. A control without a check is listed as a residual risk, not as a control.
 
-The checks are `tests/e2e/run.sh` on a fresh kind cluster (every change), the same `run.sh` against a run recorded to Cypress Cloud with the door forwarding to Cloud MCP (`.github/workflows/live.yml`, daily, ADR 8), and `scripts/validate.sh` with its planted violations (every change).
+The checks are `tests/e2e/run.sh` on a fresh kind cluster (every change), the same `run.sh` against a run recorded to Cypress Cloud with the door forwarding to Cloud MCP (`.github/workflows/live.yml`, scheduled daily, ADR 8), and `scripts/validate.sh` with its planted violations (every change).
 
 ## The assumption
 
@@ -57,7 +57,7 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 - **Bare domains.** Slack may link a domain written without a scheme. Previews are off, so nothing is fetched unless a person clicks.
 - **No sandboxed runtime.** Triage pods run on the node's kernel. [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) shows the same agents on gVisor.
 - **One replica, memory only.** The replay cache and the started set live in one receiver process. A restart inside the five-minute window forgets which signatures it saw; the Job name still stops a second triage of the same run.
-- **The live webhook is not exercised.** The trigger is the CI job's signed delivery, on kind and in the live leg. A delivery from Cypress Cloud needs a plan with webhooks and a public HTTPS receiver, and is not claimed until a run shows it. The live Cloud MCP is exercised daily (ADR 8).
+- **The live webhook is not exercised.** The trigger is the CI job's signed delivery, on kind and in the live leg. A delivery from Cypress Cloud needs a plan with webhooks and a public HTTPS receiver, and is not claimed until a run shows it. The live Cloud MCP is exercised by the live job, scheduled daily (ADR 8).
 - **The token reaches more than one run.** Cloud MCP's token is personal and reaches every project its owner can see; only the door holds it, and the door's grant and scope decide what is read with it. Cloud MCP offers no token scoped to one project.
 - **The door's egress is addresses, resolved once.** `mcp.cypress.io`'s addresses when the stack came up; another site on the same Cloudflare addresses is reachable on 443 from the door's pod, though not by its own name.
 - **Slack by name.** NetworkPolicy allows addresses, not names; against the real Slack the notifier's egress is an egress proxy that allows `hooks.slack.com` only. On kind it is the stand-in's Service.
