@@ -15,9 +15,11 @@ A signed `run.completed` delivery starts one triage per failed run. The agent re
 
 It is a reference, not a product, and it does not run in production anywhere. It runs on kind, CPU only, at no cloud cost. **A live Cypress Cloud webhook needs a plan with webhooks and a public HTTPS receiver; until one has delivered, the receiver is verified against the documented, signed payload, built from a real Cypress run, and the end of the CI job triggers the triage.** The day a project has webhooks, that CI step is deleted and nothing in the cluster changes ([ADR 1](docs/decisions/0001-a-signed-run-completed-as-the-trigger.md)).
 
+The Cloud MCP door has read a real run through `mcp.cypress.io`. The live job (`.github/workflows/live.yml`, daily) records the spec to a Cypress Cloud project, brings the stack up with the door forwarding to Cloud MCP, and runs every check above against that run: live run [43038534753](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/runs/43038534753) on main, 104 checks, none failed. The agent never held the token, and the triage cost Cloud MCP two requests.
+
 ## What is proven, and how
 
-Every line is a check in `tests/e2e/run.sh` or `tests/e2e/models.sh` on a fresh cluster, or in `scripts/validate.sh` with its planted violations. Each refusal is paired with a control that must succeed, so a check cannot pass because the environment refuses everything.
+Every line is a check in `tests/e2e/run.sh` or `tests/e2e/models.sh` on a fresh cluster, the same `run.sh` against Cypress Cloud in the live job, or `scripts/validate.sh` with its planted violations. Each refusal is paired with a control that must succeed, so a check cannot pass because the environment refuses everything.
 
 | Claim | Proof |
 |---|---|
@@ -34,6 +36,7 @@ Every line is a check in `tests/e2e/run.sh` or `tests/e2e/models.sh` on a fresh 
 | Every attempt is on record | the doors' logs show the refused tools, the out-of-scope reads and the rate limit with the agent's pod, the post and the refused second message, and every receiver decision |
 | The walls hold when a real model decides | the model leg: Granite-4.0-1B, Qwen3.5-2B and Ministral-3-3B on CPU, three triages each, from images by the flagship's digests, offered Cloud MCP's tools, a shell and a web request; every request outside reaches nothing, screenshots, `run_shell`, other runs and tools the door did not grant are refused, Slack gets at most one defused message per run with Cypress's count first, the outside address gets nothing ([ADR 6](docs/decisions/0006-open-models-beside-the-control.md)) |
 | The model is walled too | it reaches nothing, not even DNS; a pod outside the agents' namespace gets no connection to it; the agents reach it on one port, in that leg only |
+| The door holds against the real Cloud MCP | the live job, daily: the spec recorded to Cypress Cloud with `--record`, every check above run against that run with the door forwarding to `mcp.cypress.io`, and then: every read of Cloud MCP was the door's and for that run, nothing the door refused went on to Cloud MCP, the token is in `cloud-mcp` only, the door reaches Cypress on 443 and not the internet by address, another host by name or Cypress on port 80, and Cloud MCP refuses a token that is not the door's (live run [43038534753](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/runs/43038534753), 104 checks) |
 | Every static check can fail | thirty-six planted violations, each caught: a receiver that checks the signature's shape and not its value, keys replays on the unsigned event ID, takes a future timestamp, coerces a non-numeric one, believes the event header or starts a second triage on a retry; a notifier that lets link syntax through, trusts a lookalike host or lets Slack preview; a door that ignores its grant or the run's scope; a client for Cloud MCP that follows a redirect with the token on it, quotes an error answer or sends the User-Agent Cloudflare refuses; a live door that serves an answer about another run, asks Cloud MCP for every field or sends each call of a loop on to it; an admission plant edited away from the template; the pieces disagreeing; a model that can reach anything or answers another namespace, the agents' way to it on a second port, a harness tool that opens `file://`, a tool no door stands behind, a harness that reads environment admission refuses, a model pinned by name, a reading that counts a copied note as acting on it, a model report or status writer that drops what each model did, and a window that does not add its runs up |
 
 ## What the models did
@@ -114,17 +117,17 @@ What changes, and what does not:
 
 1. The receiver goes behind an ingress with TLS, with `PROJECTS` set to the project's ID.
 2. The CI job that runs `cypress run --record` ends with `scripts/send-run.py`, the receiver's URL and the signing secret from the CI system's secrets on stdin. On a plan with webhooks, that step goes and the secret is set on the webhook instead.
-3. The Cloud MCP door forwards its two granted tools to `https://mcp.cypress.io/mcp` with a Cypress token it holds. That forward is not built yet ([ADR 2](docs/decisions/0002-a-door-in-front-of-cloud-mcp.md)).
+3. The Cloud MCP door forwards its two granted tools to `https://mcp.cypress.io/mcp` with a Cypress token it holds: `UPSTREAM_URL`, the token as a Secret in `cloud-mcp`, and an egress rule to Cypress's addresses on 443, as `scripts/live.sh up` sets them ([ADR 8](docs/decisions/0008-the-live-leg.md)).
 4. The notifier's Secret holds a Slack incoming webhook URL, and its egress goes through a proxy that allows `hooks.slack.com` only.
 5. The stand-in agent is replaced by a real one. Its image and command go into `job.json` and `admission.yaml` together; `scripts/validate.sh` fails if they disagree.
 
 ## Cost
 
-Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model, the model leg's models run on the runner's CPU, and nothing holds an API key. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it: three to four minutes for the stand-in job (runs 40539339582 and 40540054939), and one more runner per model. A triage's compute is priced in `status.json` at the flagship's rate per vCPU-hour (`models/pricing.json`), for comparison: on a public repository's runner nothing is billed. Cloud MCP is on every Cypress Cloud plan; webhooks are not, and need a receiver Cypress Cloud can reach over HTTPS.
+Nothing in a cloud. The stack runs on kind, CPU only; the stand-in agent calls no model, the model leg's models run on the runner's CPU, and no model API key is held anywhere. CI is a fresh kind cluster on a GitHub-hosted runner, with the Cypress run inside it: three to four minutes for the stand-in job (runs 40539339582 and 40540054939), and one more runner per model. A triage's compute is priced in `status.json` at the flagship's rate per vCPU-hour (`models/pricing.json`), for comparison: on a public repository's runner nothing is billed. The live job records three test results a day to a Cypress Cloud project and makes about two of Cloud MCP's 100 tool requests an hour. Cloud MCP is on every Cypress Cloud plan; webhooks are not, and need a receiver Cypress Cloud can reach over HTTPS.
 
 ## What it does not do
 
-The [threat model](docs/threat-model.md) lists every threat with its control and check, and what is not covered. The agent can still write a plain-words lie under the facts line. Triage pods run on the node's kernel; [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) shows the same kind of agent on gVisor. The replay cache is one process's memory. A delivery from Cypress Cloud and a forward to the live Cloud MCP are not exercised. The audit trail stays on the node.
+The [threat model](docs/threat-model.md) lists every threat with its control and check, and what is not covered. The agent can still write a plain-words lie under the facts line. Triage pods run on the node's kernel; [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) shows the same kind of agent on gVisor. The replay cache is one process's memory. A delivery from Cypress Cloud is not exercised; the live Cloud MCP is, daily. The audit trail stays on the node.
 
 ## Repository
 
@@ -141,8 +144,8 @@ manifests/models/     the model leg's model server and its walls
 manifests/model-agent/ the model leg's harness, which does what the model asks
 models/               the three models' pins (the flagship's), the build recipe, the vCPU price
 manifests/stand-ins/  Slack and an outside address, on kind
-scripts/              install, the CI trigger, results to a run, the static checks, the live probe
-tests/e2e/            the checks against a running cluster, the deliveries and the admission plants
+scripts/              install, the CI trigger, results to a run, the static checks, the live leg
+tests/e2e/            the checks against a running cluster, live or not, the deliveries and the admission plants
 tests/unit/           the three doors' decisions, the client for Cloud MCP and the model leg's reading, without a cluster
 tests/static/         the planted violations for the static checks
 docs/                 the threat model and the decisions
@@ -150,7 +153,7 @@ docs/                 the threat model and the decisions
 
 ## Decisions
 
-[`docs/decisions/`](docs/decisions/): a signed `run.completed` as the trigger, sent by the CI job until Cypress Cloud sends it; a door in front of Cloud MCP, scoped to the agent's own run; the notifier writes the facts and defuses the agent's words; a deterministic stand-in agent in CI, not a model; admission holds every triage Job to the receiver's template; open models on CPU beside the stand-in, behind the same walls; a live leg that reads a recorded run back through the real Cloud MCP (proposed). Each ends with how the choice would be explained to a customer.
+[`docs/decisions/`](docs/decisions/): a signed `run.completed` as the trigger, sent by the CI job until Cypress Cloud sends it; a door in front of Cloud MCP, scoped to the agent's own run; the notifier writes the facts and defuses the agent's words; a deterministic stand-in agent in CI, not a model; admission holds every triage Job to the receiver's template; open models on CPU beside the stand-in, behind the same walls; a live leg that triages a recorded run through the real Cloud MCP. Each ends with how the choice would be explained to a customer.
 
 The same wall-building is in [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) (what an untrusted agent can reach) and [kubernetes-air-gapped-ai-agent](https://github.com/heyvaldemar/kubernetes-air-gapped-ai-agent) (an agent and its models with no way out, and how often models are fooled). Here the untrusted text comes from a test run.
 

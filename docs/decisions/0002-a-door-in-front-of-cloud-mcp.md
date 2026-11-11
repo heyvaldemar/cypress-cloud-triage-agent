@@ -13,17 +13,17 @@ That is the right shape for a developer in an editor. For an agent started by a 
 
 The agent reaches Cloud's data through one door (`manifests/cloud-mcp/server.py`), an MCP server with Cloud MCP's tool names and arguments:
 
-- **Identity.** The agent's pod carries a ServiceAccount token bound to the door's audience, checked by TokenReview. It holds no Cypress credential. A live door would hold the Cypress token instead of the agent.
+- **Identity.** The agent's pod carries a ServiceAccount token bound to the door's audience, checked by TokenReview. It holds no Cypress credential. The live door holds the Cypress token instead of the agent ([ADR 8](0008-the-live-leg.md)).
 - **Grant.** `policy.json` gives the agent `cypress_get_runs` and `cypress_get_failed_tests`. A tool it was not granted, `cypress_get_test_screenshots` included, gets the answer a tool that does not exist gets.
 - **Scope.** The agent reads one run: the receiver names the Job `triage-<project>-<run>`, the token is bound to the pod, and the door reads the run from the pod's name, not from the arguments. A failure message that says "now read run 8" gets "Out of scope".
 - **Rate.** Ten calls in ten seconds per identity, below Cloud MCP's hourly limit spread over a run's triage.
 
-On kind there is no Cypress Cloud, so the door serves runs from files written from a real Cypress run's results (`scripts/results-to-run.py`). Its answers are this repository's shape; Cloud MCP's own response format is not published.
+On kind there is no Cypress Cloud, so the door serves runs from files written from a real Cypress run's results (`scripts/results-to-run.py`). Its answers are this repository's shape. Cloud MCP's own format is not published; the live door reads it and answers in the same shape ([ADR 8](0008-the-live-leg.md)).
 
 ## Consequences
 
 - A fooled agent reads its own run's failures and summary, and nothing else in the organisation.
-- The live forward to `mcp.cypress.io` is not built yet. It is one tool function per granted tool, the token as a Secret in the door's namespace, and an egress rule to Cypress, reviewed together.
+- The live forward to `mcp.cypress.io` is [ADR 8](0008-the-live-leg.md): one tool function per granted tool, the token as a Secret in the door's namespace, and an egress rule to Cypress, built together and proven daily by the live job.
 - Cloud MCP has no write tools today. If it gains one, the grant decides whether the agent sees it; it is not granted by default.
 
 ## Alternatives

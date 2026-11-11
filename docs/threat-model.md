@@ -2,7 +2,7 @@
 
 What the triage stack defends against when a failing test talks its agent into misbehaving, the control for each threat, and the check that proves it. A control without a check is listed as a residual risk, not as a control.
 
-The checks are `tests/e2e/run.sh` on a fresh kind cluster (every change), and `scripts/validate.sh` with its planted violations (every change).
+The checks are `tests/e2e/run.sh` on a fresh kind cluster (every change), the same `run.sh` against a run recorded to Cypress Cloud with the door forwarding to Cloud MCP (`.github/workflows/live.yml`, daily, ADR 8), and `scripts/validate.sh` with its planted violations (every change).
 
 ## The assumption
 
@@ -14,7 +14,7 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 |---|---|
 | The failure context | test names, errors and application text are what an attacker wants sent out |
 | The channel's trust | a summary that hides a failure, pings everyone or carries a link is harm without a network packet |
-| The Cypress Cloud credential | it reaches every project its owner can see |
+| The Cypress Cloud credential | it reaches every project its owner can see; in the live leg the door holds it |
 | The webhook signing secret | whoever holds it can start triage |
 | The Slack webhook URL | whoever holds it can post as the bot |
 | The cluster API and other workloads | a token with the right verbs is the cluster |
@@ -44,6 +44,10 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 | The model server becomes a way in or out | the `models` namespace denies all egress and takes the agents' namespace only, on one port; the agents reach it in the model leg only | a pod outside the agents' namespace gets no connection; `scripts/check-models.py` and its plants |
 | A different model, or altered weights, is served | the image by digest, the flagship's, built reproducibly from the publisher's file checked against its sha256 | `scripts/models.sh build` fails on another digest; the e2e checks the mounted reference |
 | The harness becomes a hole the model can use | it routes every tool to a door or the network, reads only the environment admission allows, and its web request opens http(s) only | `scripts/check-models.py` and its plants, among them one that lets it open `file://`, where the pod's tokens are |
+| The live door reads, or serves, a run it was not asked for | the door builds Cloud MCP's arguments from the run it scoped the call to, sends nothing else the caller sent, and refuses an answer with a row about another run (ADR 8) | live step 9: every read of Cloud MCP was for the run, and nothing the door refused went on to it; `test_cloud_mcp.py` with a plant that serves a row about another run |
+| The Cloud MCP token leaves the door | a Secret in `cloud-mcp` only, mounted into the door; the client sends it to one URL, follows no redirect, uses no proxy from the environment and never reads an error answer's body | live step 9: the token is in `cloud-mcp` and nowhere else, the agent lists what it holds; `test_upstream.py` with plants for a followed redirect and a quoted error answer |
+| The live door becomes a way out | its egress is Cypress's addresses on 443 and DNS, and its pod is given those addresses for the name | live step 9: from the door's pod, Cloud MCP on 443 is reached; 1.1.1.1, GitHub's API by name and Cloud MCP on port 80 are not |
+| A fooled agent's loop spends the owner's Cloud MCP limit | one Cloud MCP request per tool and run in 30 seconds, below the door's own rate limit | live step 9 counts the requests sent: two for a triage; a plant that sends each call on |
 | A copied note is read as a model acting on it, or the reverse | copies of the note are taken out before the text asks are read; the ping counts only at the start | `tests/unit/test_model_reading.py`, with the reading that miscounted Granite-4.0-1B's first triage as a plant |
 
 ## Residual risks
@@ -53,7 +57,9 @@ The agent will be fooled. A Cypress failure message carries whatever the applica
 - **Bare domains.** Slack may link a domain written without a scheme. Previews are off, so nothing is fetched unless a person clicks.
 - **No sandboxed runtime.** Triage pods run on the node's kernel. [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) shows the same agents on gVisor.
 - **One replica, memory only.** The replay cache and the started set live in one receiver process. A restart inside the five-minute window forgets which signatures it saw; the Job name still stops a second triage of the same run.
-- **The live webhook and the live Cloud MCP are not exercised.** On kind the trigger is the CI job's signed delivery and the door serves a real Cypress run from files. A delivery from Cypress Cloud needs a plan with webhooks and a public HTTPS receiver, and a forward to `mcp.cypress.io` a token; neither is claimed until a run shows it.
+- **The live webhook is not exercised.** The trigger is the CI job's signed delivery, on kind and in the live leg. A delivery from Cypress Cloud needs a plan with webhooks and a public HTTPS receiver, and is not claimed until a run shows it. The live Cloud MCP is exercised daily (ADR 8).
+- **The token reaches more than one run.** Cloud MCP's token is personal and reaches every project its owner can see; only the door holds it, and the door's grant and scope decide what is read with it. Cloud MCP offers no token scoped to one project.
+- **The door's egress is addresses, resolved once.** `mcp.cypress.io`'s addresses when the stack came up; another site on the same Cloudflare addresses is reachable on 443 from the door's pod, though not by its own name.
 - **Slack by name.** NetworkPolicy allows addresses, not names; against the real Slack the notifier's egress is an egress proxy that allows `hooks.slack.com` only. On kind it is the stand-in's Service.
 - **The model's signature is not checked here.** The model is pinned by digest, the flagship's; the flagship verifies its signature at admission with Kyverno. Here the digest stands for the bytes.
 - **The model server has no identity check.** Anything that runs in the agents' namespace may ask it; it holds no data and reaches nothing.

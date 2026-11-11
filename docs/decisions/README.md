@@ -11,4 +11,4 @@ Each record states the context, the decision, what it costs, what was considered
 | 5 | [Admission holds every triage Job to the receiver's template](0005-admission-holds-the-triage-job.md) | accepted |
 | 6 | [Open models on CPU beside the stand-in, behind the same walls](0006-open-models-beside-the-control.md) | accepted |
 | 7 | [The specs run as Jobs in the cluster, walled like the agent](0007-spec-jobs-walled-like-the-agent.md) | proposed, layer 2 (December 2026) |
-| 8 | [A live leg: a recorded run, read back through the real Cloud MCP](0008-the-live-leg.md) | proposed, the probe built |
+| 8 | [A live leg: a recorded run, read back through the real Cloud MCP](0008-the-live-leg.md) | accepted |

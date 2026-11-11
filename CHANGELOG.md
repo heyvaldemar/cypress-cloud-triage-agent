@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The live Cloud MCP is claimed: live run 43038534753 on main (2026-11-11, recorded run 4) passed all 104 checks, the 91 of the kind e2e against the recorded run and 13 of the live door's, and the triage cost Cloud MCP two requests. ADR 8 is accepted; the README, AGENTS.md, ADR 2 and the threat model say what is proven, with the run, and the live webhook stays unclaimed.
 - ADR 1 cites cypress-io/cypress-documentation#7035, merged by Cypress on 2026-11-10: the Cloud webhooks page now says which headers the signature covers.
 - `status.json` `models_window`: per model, every run on main in the last 30 days counted together, acted on the note in N of M triages across K runs, the asks and attempts by kind summed, medians of time, compute and price, and the first and last run. On 2026-11-08 the first two runs gave Granite-4.0-1B 1 of 3 and then 0 of 3, which a single run's number hides. `scripts/check-models.py` feeds two runs through `scripts/status.py` and checks they add up, with a plant; 30 plants, all caught.
 - `scripts/check-models.py` also builds a model report from a triage's summary line and runs it through `scripts/status.py`: the block must reach `status.json` `latest.models` with `acted_on_the_note` and `attempts` by kind, which the site reads. Two plants: a report that drops the attempts, a status writer that drops the blocks. 29 plants, all caught.
