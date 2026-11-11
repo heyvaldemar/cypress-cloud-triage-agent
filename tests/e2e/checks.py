@@ -4,6 +4,7 @@
     tests/e2e/checks.py cypress          out/cypress-results.json: the run, and the planted note
     tests/e2e/checks.py slack PROJECT RUN  out/slack.log: what reached Slack
     tests/e2e/checks.py doors POD        out/{cloud-mcp,notifier,receiver}.log: the doors' decisions
+    tests/e2e/checks.py live POD PROJECT RUN  out/cloud-mcp.log of the live leg: what reached Cloud MCP
     tests/e2e/checks.py model-triage LOG               the model leg: the harness's triage ended, walled
     tests/e2e/checks.py model-slack PROJECT RUN POSTED the model leg: what reached Slack for one run
     tests/e2e/checks.py model-report MODEL DIGEST LOG... the model leg's measured lines, as JSON
@@ -79,6 +80,33 @@ def doors(argv):
     want = ["bad_signature", "bad_timestamp", "duplicate", "ignored", "nothing_to_triage", "replayed", "stale",
             "started", "too_large", "unknown_project", "unsigned"]
     print("%s\tthe receiver logged every decision: %s" % ("ok" if all(d in decisions for d in want) else "bad", ", ".join(decisions)))
+
+
+def live(argv):
+    """The live leg (ADR 8): every read of Cloud MCP was the door's, for the
+    run, and nothing the door refused went on to Cloud MCP."""
+    pod, project, run = argv[0], argv[1], int(argv[2])
+    log = [json.loads(l) for l in open("out/cloud-mcp.log") if l.startswith("{")]
+    listening = [l for l in log if l.get("event") == "listening"]
+    print("%s	the door served the run from Cloud MCP, not from files" % (
+        "ok" if listening and all(l.get("runs") == "https://mcp.cypress.io/mcp" for l in listening) else "bad"))
+    reads = [l for l in log if l.get("upstream")]
+    sent = [l for l in reads if l["upstream"].get("outcome") == "forwarded"]
+    print("%s	every read of Cloud MCP was for the run: %d requests sent, %d answered from the door's copy" % (
+        "ok" if sent and all(l["upstream"].get("run") == "%s #%d" % (project, run) for l in reads) else "bad",
+        len(sent), sum(1 for l in reads if l["upstream"].get("outcome") == "kept")))
+    for tool in ("cypress_get_runs", "cypress_get_failed_tests"):
+        mine = sorted({l["upstream"].get("outcome") for l in reads if l.get("pod") == pod and l.get("name") == tool})
+        print("%s	the agent's %s was answered from Cloud MCP (%s)" % (
+            "ok" if mine and set(mine) <= {"forwarded", "kept"} else "bad", tool, ", ".join(mine) or "never"))
+    facts = sorted({l["upstream"].get("outcome") for l in reads if l.get("identity", "").endswith(":notify:notifier")})
+    print("%s	the notifier's counts came from Cloud MCP (%s)" % (
+        "ok" if facts and set(facts) <= {"forwarded", "kept"} else "bad", ", ".join(facts) or "never"))
+    refused = [l for l in log if l.get("decision") in ("denied", "out_of_scope", "rate_limited", "invalid_arguments")]
+    print("%s	nothing the door refused went on to Cloud MCP (%d refusals)" % (
+        "ok" if refused and not any(l.get("upstream") for l in refused) else "bad", len(refused)))
+    errors = [l for l in reads if l["upstream"].get("outcome") == "error"]
+    print("%s	no read of Cloud MCP failed (%d)" % ("ok" if not errors else "bad", len(errors)))
 
 
 # --- the model leg (ADR 6, tests/e2e/models.sh) ------------------------------
@@ -248,4 +276,4 @@ def model_report(argv):
 
 if __name__ == "__main__":
     {"cypress": cypress, "slack": slack, "doors": doors, "model-triage": model_triage,
-     "model-slack": model_slack, "model-report": model_report}[sys.argv[1]](sys.argv[2:])
+     "model-slack": model_slack, "model-report": model_report, "live": live}[sys.argv[1]](sys.argv[2:])

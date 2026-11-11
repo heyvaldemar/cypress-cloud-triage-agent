@@ -23,8 +23,12 @@ triage needs, and it holds the credential; the agent does not:
      characters.
 
 On kind the runs come from the files in RUNS_DIR, written from a real
-Cypress run's results (scripts/results-to-run.py). The answers are this
-repository's shape, not a copy of Cloud MCP's, which is not published.
+Cypress run's results (scripts/results-to-run.py). With UPSTREAM_URL set
+(the live leg, ADR 8) the door forwards instead: it reads Cloud MCP with
+the token in UPSTREAM_TOKEN_FILE, which only this door holds, for the run
+it has already scoped the call to, asks for the fields it serves and no
+more, refuses an answer about any other run, and answers in the same shape
+as the files. The caller never learns which of the two served it.
 
 Every decision is one JSON line on stdout, with the caller's ServiceAccount
 and pod. Standard library only, on a pinned python:3.13-alpine.
@@ -43,10 +47,15 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import upstream  # noqa: E402  the door's client for Cloud MCP
+
 PROTOCOL = "2026-07-28"
 SERVER_INFO = {"name": "cloud-mcp-stand-in", "version": "1.0.0"}
 POLICY_PATH = os.environ.get("MCP_POLICY", "/etc/cloud-mcp/policy.json")
 RUNS_DIR = os.environ.get("RUNS_DIR", "/var/lib/cloud-mcp/runs")
+UPSTREAM_URL = os.environ.get("UPSTREAM_URL", "")
+UPSTREAM_TOKEN_FILE = os.environ.get("UPSTREAM_TOKEN_FILE", "/var/run/cloud-mcp-upstream/token")
 API = "https://kubernetes.default.svc"
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 MAX_BODY = 64 * 1024
@@ -94,6 +103,129 @@ def get_failed_tests(args):
 def get_test_screenshots(args):
     load_run(args["projectId"], args["runNumber"])
     return json.dumps([])
+
+
+class Unreadable(ValueError):
+    """Cloud MCP answered, but not with something this door serves."""
+
+
+# What the current request's forward did, for its audit line.
+FORWARDED = threading.local()
+
+
+class Forward:
+    """The live door's tools. Each reads Cloud MCP for the run the door has
+    already scoped the call to: the projectId and runNumber the grant let
+    through, under Cloud MCP's own argument names, and nothing else the
+    caller sent. It asks for the fields it serves, so who pushed the commit
+    and the Test Replay links never reach the agent; it refuses an answer
+    with a row about any other run; and it answers in the files' shape.
+
+    An answer is kept for `ttl` seconds per tool and run: a fooled agent's
+    loop costs Cloud MCP one request, not one per call. Cloud MCP allows 100
+    tool requests an hour per user."""
+
+    RUN_FIELDS = ["project_id", "run_number", "run_status", "created_at", "duration", "total_test_count",
+                  "passed_test_count", "failed_test_count", "flaky_test_count", "total_spec_count"]
+    TEST_FIELDS = ["project_id", "run_number", "spec_filepath", "test_name", "duration",
+                   "attempts.attempt_number", "attempts.error_name", "attempts.error_message"]
+    PAGE, PAGES = 25, 4
+
+    def __init__(self, client, ttl=30, clock=time.monotonic):
+        self.client, self.ttl, self.clock = client, ttl, clock
+        self.kept = {}
+        self.lock = threading.Lock()
+
+    def read(self, tool, project, number, fields):
+        """Every row Cloud MCP has for one run, every page of it."""
+        key = (tool, project, number)
+        with self.lock:
+            hit = self.kept.get(key)
+            if hit and hit[0] > self.clock():
+                FORWARDED.line = {"tool": tool, "run": "%s #%d" % (project, number), "outcome": "kept"}
+                return hit[1]
+        FORWARDED.line = {"tool": tool, "run": "%s #%d" % (project, number), "outcome": "error"}
+        rows = []
+        for page in range(1, self.PAGES + 1):
+            result = self.client.call_tool(tool, {"project_id": project, "run_number": number, "fields": fields,
+                                                  "limit": self.PAGE, "page": page})
+            limit = ((result.get("_meta") or {}).get("io.cypress/rate-limit") or {}).get("remaining")
+            if limit is not None:
+                FORWARDED.line["cloud_requests_left"] = limit
+            if result.get("isError"):
+                raise Unreadable("Cloud MCP answered with an error")
+            data = result.get("structuredContent")
+            if not isinstance(data, dict):
+                try:
+                    data = json.loads(next(c["text"] for c in result.get("content") or [] if c.get("type") == "text"))
+                except (StopIteration, KeyError, TypeError, ValueError):
+                    raise Unreadable("Cloud MCP's answer is not the JSON this door reads") from None
+            page_rows = data.get("data") if isinstance(data, dict) else None
+            if not isinstance(page_rows, list):
+                raise Unreadable("Cloud MCP's answer has no rows")
+            for row in page_rows:
+                if not isinstance(row, dict) or (row.get("project_id"), row.get("run_number")) != (project, number):
+                    raise Unreadable("Cloud MCP answered about another run")
+            rows += page_rows
+            if not data.get("has_next_page"):
+                break
+        else:
+            raise Unreadable("Cloud MCP has more than %d pages for one run" % self.PAGES)
+        with self.lock:
+            self.kept[key] = (self.clock() + self.ttl, rows)
+        FORWARDED.line["outcome"] = "forwarded"
+        return rows
+
+    def get_runs(self, args):
+        project, number = args["projectId"], args["runNumber"]
+        rows = self.read("cypress_get_runs", project, number, self.RUN_FIELDS)
+        if not rows:
+            raise NotFound("no run %d in project %s" % (number, project))
+        if len(rows) > 1:
+            raise Unreadable("Cloud MCP answered with more than one run")
+        r = rows[0]
+        return json.dumps({
+            "projectId": project, "runNumber": number,
+            "runUrl": "https://cloud.cypress.io/projects/%s/runs/%d" % (project, number),
+            "status": r.get("run_status"), "createdAt": r.get("created_at"), "totalDuration": r.get("duration"),
+            "totalTests": r.get("total_test_count"), "totalPassed": r.get("passed_test_count"),
+            "totalFailed": r.get("failed_test_count"), "totalFlaky": r.get("flaky_test_count"),
+            "totalSpecs": r.get("total_spec_count"),
+        })
+
+    def tests(self, tool, args, state=None):
+        rows = self.read(tool, args["projectId"], args["runNumber"],
+                         self.TEST_FIELDS + ([] if state else ["status"]))
+        out = []
+        for r in rows:
+            attempts = [a for a in r.get("attempts") or [] if isinstance(a, dict)]
+            last = attempts[-1] if attempts else {}
+            name, message = last.get("error_name"), last.get("error_message")
+            title = r.get("test_name")
+            out.append({
+                "spec": r.get("spec_filepath"),
+                "title": " > ".join(map(str, title)) if isinstance(title, list) else str(title or ""),
+                "state": state or r.get("status"), "attempts": len(attempts), "durationMs": r.get("duration"),
+                "error": ("%s: %s" % (name, message) if name else message) if message else None,
+            })
+        return out
+
+    def get_tests(self, args):
+        return json.dumps(self.tests("cypress_get_tests", args))
+
+    def get_failed_tests(self, args):
+        return json.dumps(self.tests("cypress_get_failed_tests", args, "failed"))
+
+    def get_test_screenshots(self, args):
+        # Granted to no one; and if it were, a screenshot is not forwarded.
+        raise NotFound("screenshots are not forwarded")
+
+    def serve(self, tools):
+        """Point the tools at Cloud MCP instead of the files."""
+        for name, run in [("cypress_get_runs", self.get_runs), ("cypress_get_tests", self.get_tests),
+                          ("cypress_get_failed_tests", self.get_failed_tests),
+                          ("cypress_get_test_screenshots", self.get_test_screenshots)]:
+            tools[name]["run"] = run
 
 
 RUN_ARGS = {
@@ -345,6 +477,9 @@ class Server:
                 is_error = False
             except NotFound as e:
                 text, is_error = "Not found: %s" % e, True
+            except (Unreadable, upstream.UpstreamError) as e:
+                # The message names what failed, never the token or an error body.
+                text, is_error = "Cloud MCP could not be read: %s" % e, True
             except (OSError, ValueError) as e:
                 text, is_error = "The run could not be read: %s" % type(e).__name__, True
             return complete({"content": [{"type": "text", "text": sanitize(text)}], "isError": is_error}), \
@@ -426,8 +561,10 @@ class Handler(BaseHTTPRequestHandler):
                 audit(identity=who, pod=pod, method=msg["method"], decision="accepted")
                 return self.send(202)
             SERVER.check_protocol(self.headers, msg)
+            FORWARDED.line = None
             result, decision, name = SERVER.handle(who, pod, msg)
-            audit(identity=who, pod=pod, method=msg["method"], name=name, decision=decision)
+            line = {"upstream": FORWARDED.line} if FORWARDED.line else {}
+            audit(identity=who, pod=pod, method=msg["method"], name=name, decision=decision, **line)
             self.send(200, {"jsonrpc": "2.0", "id": msg["id"], "result": result})
         except Refused as r:
             params = msg.get("params") if isinstance(msg, dict) else None
@@ -449,9 +586,16 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     global SERVER
     SERVER = Server(load_policy())
+    source = "files"
+    if UPSTREAM_URL:
+        with open(UPSTREAM_TOKEN_FILE, encoding="utf-8") as f:
+            token = f.read().strip()
+        Forward(upstream.Upstream(UPSTREAM_URL, token)).serve(TOOLS)
+        del token
+        source = UPSTREAM_URL
     port = int(os.environ.get("PORT", "8080"))
     httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    audit(event="listening", port=port, protocol=PROTOCOL, identities=sorted(SERVER.grants))
+    audit(event="listening", port=port, protocol=PROTOCOL, identities=sorted(SERVER.grants), runs=source)
     httpd.serve_forever()
 
 

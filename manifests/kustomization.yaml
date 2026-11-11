@@ -25,6 +25,7 @@ configMapGenerator:
     namespace: cloud-mcp
     files:
       - cloud-mcp/server.py
+      - cloud-mcp/upstream.py
       - cloud-mcp/policy.json
   - name: notifier
     namespace: notify

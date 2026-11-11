@@ -26,6 +26,11 @@
 #      credential exists only where it is used
 #   8. a namespace that is labelled for agents but has its egress wide open
 #      still cannot reach the receiver or Slack, and does reach the outside
+#   9. with LIVE set (ADR 8): the run was recorded to Cypress Cloud and the
+#      door forwards to Cloud MCP; every read of it was the door's, for the
+#      run, nothing refused went on to it, the token is in cloud-mcp only,
+#      the door reaches Cypress on 443 and nothing else, and Cloud MCP
+#      refuses a token that is not the door's
 #
 # Needs kubectl, python3 and Docker. Writes a summary to $GITHUB_STEP_SUMMARY
 # when set.
@@ -40,6 +45,16 @@ CURL=docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb
 PROJECT=kind01
 RUN="${RUN_NUMBER:-${GITHUB_RUN_NUMBER:-1}}"
 JOB="triage-$PROJECT-$RUN"
+# The live leg (ADR 8, .github/workflows/live.yml): scripts/live.sh record
+# recorded the spec to Cypress Cloud and scripts/live.sh up pointed the door
+# at Cloud MCP. The run is the recorded one, every check below runs against
+# it, and step 9 checks what only the live door does.
+if [ -n "${LIVE:-}" ]; then
+  PROJECT="${CYPRESS_PROJECT_ID:?the live leg needs CYPRESS_PROJECT_ID}"
+  RUN="$(cat out/recorded-run 2>/dev/null)"
+  [[ "$RUN" =~ ^[1-9][0-9]{0,8}$ ]] || { echo "no recorded run in out/recorded-run"; exit 1; }
+  JOB="triage-$PROJECT-$RUN"
+fi
 PORT="${RECEIVER_PORT:-18080}"
 results=()
 measured=()
@@ -88,11 +103,18 @@ jobs_in_namespace() { kubectl -n triage-agents get jobs -o name 2>/dev/null | gr
 # --- 1 -----------------------------------------------------------------------
 step "1. Cypress runs the spec, and a customer's note lands in a failure message"
 mkdir -p out
-rm -f out/cypress-results.json
-docker run --rm -v "$ROOT:/e2e" -w /e2e -u "$(id -u):$(id -g)" -e HOME=/tmp "$CYPRESS" >out/cypress.log 2>&1
-verdicts < <(python3 tests/e2e/checks.py cypress)
-./scripts/load-run.sh "$PROJECT" "$RUN" >/dev/null && pass "the Cloud MCP stand-in serves $PROJECT #$RUN" \
-  || fail "the run could not be loaded into the Cloud MCP stand-in"
+if [ -n "${LIVE:-}" ]; then
+  verdicts < <(python3 tests/e2e/checks.py cypress)
+  python3 scripts/results-to-run.py out/cypress-results.json "$PROJECT" "$RUN" out >/dev/null \
+    && pass "Cypress Cloud holds the run, #$RUN, recorded by this job; the door reads it through Cloud MCP" \
+    || fail "the recorded run's delivery could not be built"
+else
+  rm -f out/cypress-results.json
+  docker run --rm -v "$ROOT:/e2e" -w /e2e -u "$(id -u):$(id -g)" -e HOME=/tmp "$CYPRESS" >out/cypress.log 2>&1
+  verdicts < <(python3 tests/e2e/checks.py cypress)
+  ./scripts/load-run.sh "$PROJECT" "$RUN" >/dev/null && pass "the Cloud MCP stand-in serves $PROJECT #$RUN" \
+    || fail "the run could not be loaded into the Cloud MCP stand-in"
+fi
 
 # --- 2 -----------------------------------------------------------------------
 step "2. admission holds triage-agents to the receiver's Job"
@@ -265,6 +287,16 @@ for want in "receiver blocked" "slack blocked" "outside reached"; do
   esac
 done
 
+# --- 9 -----------------------------------------------------------------------
+if [ -n "${LIVE:-}" ]; then
+  step "9. the live door: Cloud MCP, read by the door only, for this run only"
+  verdicts < <(python3 tests/e2e/checks.py live "$agent_pod" "$PROJECT" "$RUN")
+  [ "$(holders cloud-mcp-upstream)" = "cloud-mcp " ] && pass "the Cloud MCP token is in cloud-mcp and nowhere else" \
+    || fail "the Cloud MCP token is in: $(holders cloud-mcp-upstream)"
+  door_pod="$(kubectl -n cloud-mcp get pods -l app.kubernetes.io/name=cloud-mcp -o jsonpath='{.items[0].metadata.name}')"
+  verdicts < <(kubectl -n cloud-mcp exec -i "$door_pod" -c server -- python3 -I - <tests/e2e/live-door.py 2>&1)
+fi
+
 # One plain line, as every measured line is: the site and the badges show it as
 # written, and until 2026-11-03 this one was a Python dict.
 measure "$(python3 -c 'import json,sys
@@ -292,6 +324,8 @@ printf '\n'
 printf '%s\n' "${results[@]}"
 printf '%d checks, %d failed\n' "${#results[@]}" "$(printf '%s\n' "${results[@]}" | grep -c '^FAIL' || true)"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  { echo "### triage e2e"; echo; echo '```'; printf '%s\n' "${results[@]}"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+  # The live leg's project is not named in public, the summary included.
+  hide="${LIVE:+s/$PROJECT/<project>/g}"
+  { echo "### triage e2e${LIVE:+, live}"; echo; echo '```'; printf '%s\n' "${results[@]}" | sed "$hide"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
 fi
 exit "$failed"

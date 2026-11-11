@@ -1,23 +1,25 @@
 name: Live Cloud MCP
 
-# The one workflow that reaches Cypress Cloud (ADR 8, proposed). It records
-# the spec to the maintainer's project with --record and asks the real Cloud
-# MCP what it serves about that run, so the door's forward to
-# mcp.cypress.io is written from Cloud MCP's answers and not from a guess:
-# the docs name the tools but publish neither their arguments nor their
-# answers.
+# The one workflow that reaches Cypress Cloud (ADR 8). The live job records
+# the spec to the maintainer's project with --record, brings up the triage
+# stack on kind with the Cloud MCP door forwarding to mcp.cypress.io, and
+# runs every check of tests/e2e/run.sh against the recorded run, then the
+# checks only the live door has (step 9). The probe job, run by hand with a
+# certificate, asks the real Cloud MCP what it serves, which is what the
+# door's forward was written from: Cypress names the tools but publishes
+# neither their arguments nor their answers.
 #
 # The record key, the Cloud MCP token and the project ID are secrets of the
-# environment cypress-cloud, which only main may use. The job's log and
-# summary show the protocol, the tool schemas and each answer's shape with
-# its values replaced by their types. The answers go only into an artifact
-# encrypted to the certificate passed as `recipient`; without one, nothing
-# but the public part is kept.
+# environment cypress-cloud, which only main may use, so GitHub masks the
+# project and every run URL in the logs. The summary and the kept logs have
+# the project taken out; the probe's answers leave the job only encrypted.
 on:
+  schedule:
+    - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
       recipient:
-        description: PEM certificate to encrypt the answers to (optional)
+        description: PEM certificate to encrypt the probe's answers to; empty runs the live job
         required: false
         default: ""
 
@@ -29,8 +31,76 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  live:
+    name: A recorded run, triaged through the real Cloud MCP
+    if: github.event_name == 'schedule' || inputs.recipient == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: cypress-cloud
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned tools
+        run: ./scripts/install-tools.sh >> "$GITHUB_PATH"
+
+      - name: Record the spec to Cypress Cloud
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+        run: ./scripts/live.sh record
+
+      - name: Create the kind cluster
+        run: kind create cluster --config kind/cluster.yaml --wait 120s
+
+      - name: Apply the triage stack
+        run: ./scripts/install.sh
+
+      - name: Point the door at Cloud MCP
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          TOKEN: ${{ secrets.CYPRESS_MCP_TOKEN }}
+        run: ./scripts/live.sh up <<<"$TOKEN"
+
+      - name: Run every check against the live door
+        env:
+          LIVE: "1"
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+        run: ./tests/e2e/run.sh
+
+      # What each door and the agent wrote, with the project taken out. The
+      # tokens and secrets are never in these files.
+      - name: Take the project out of the logs
+        if: always()
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/live-logs"
+          for f in agent receiver cloud-mcp notifier slack; do
+            [ -f "out/$f.log" ] && sed "s/$CYPRESS_PROJECT_ID/<project>/g" "out/$f.log" >"$RUNNER_TEMP/live-logs/$f.log"
+          done
+          true
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: live-logs
+          path: ${{ runner.temp }}/live-logs/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: What the cluster looked like
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40
+
   probe:
     name: Record a run, read it back through Cloud MCP
+    if: github.event_name == 'workflow_dispatch' && inputs.recipient != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: cypress-cloud
