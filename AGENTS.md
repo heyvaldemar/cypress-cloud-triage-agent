@@ -46,7 +46,7 @@ Dependabot reads only the actions. Everything else is moved by hand, with the ne
 
 ## Numbers
 
-The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, thirty planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
+The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, thirty-two planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
 
 ## Releases
 
@@ -62,7 +62,7 @@ Plain and specific. No em dashes, no marketing words, no claim the evidence does
 
 - Print a secret or a credential, pass one as a command-line argument, or put one in a file or a log. The signing secret and the Slack URL are generated at install and handed to kubectl on stdin; the e2e run and the CI trigger read the signing secret on stdin.
 - Turn off or weaken a check, a policy, a test or a gate to get a run green.
-- Touch anything outside this repository's own CI to test a change: no cloud resources, no outside services, no real Slack, no Cypress Cloud project.
+- Touch anything outside this repository's own CI to test a change: no cloud resources, no outside services, no real Slack, no Cypress Cloud project. The one exception is `.github/workflows/live.yml` (ADR 8): it records the spec to the maintainer's Cypress Cloud project and reads it back through Cloud MCP, with the secrets of the `cypress-cloud` environment, which only main may use. It prints no project, run URL or answer; the answers leave the job only encrypted.
 - Put a model API key into the e2e run, or a model anywhere but the model leg's `models` namespace. The stand-in agent is the control, fooled the same way every run (ADR 4); the model leg runs open models on CPU beside it (ADR 6), and nothing a model chooses is a check: a check is what the walls promise.
 - Read a copy of the note in a model's summary as the model acting on it. `tests/e2e/checks.py` `asks_of` takes every copy out first (ADR 6).
 - Let the receiver key replays on `X-Cypress-Event-Id`, read the event type from `X-Cypress-Event`, or coerce a timestamp that is not digits (ADR 1).

@@ -29,3 +29,5 @@
 "tests/e2e/checks.py"	"\"attempts\": totals, \"rate_limited\": loop,"	"\"rate_limited\": loop,"	"models"	"a model report that drops the attempts by kind on its way to the status branch"
 "scripts/status.py"	"                merged[\"models\"] += part.get(\"models\", [])"	"                pass"	"models"	"a status writer that leaves the model leg's blocks out of status.json"
 "scripts/status.py"	"            m[\"triages\"] += b.get(\"triages\", 0)\n"	"            m[\"triages\"] = b.get(\"triages\", 0)\n"	"models"	"a window that keeps the last run's triage count instead of adding them up"
+"manifests/cloud-mcp/upstream.py"	"urllib.request.ProxyHandler({}), _NoRedirect(),"	"urllib.request.ProxyHandler({}),"	"mcp"	"a client for Cloud MCP that follows a redirect, Authorization header and all"
+"manifests/cloud-mcp/upstream.py"	"            e.close()\n            raise HTTPStatus(e.code) from None"	"            raise UpstreamError(e.read().decode()) from None"	"mcp"	"a client that carries an error answer's body, which can quote the token, into its message"

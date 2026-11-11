@@ -9,7 +9,8 @@
 #   python        every Python file compiles
 #   receiver      the webhook door's decisions (tests/unit/test_receiver.py)
 #   notifier      what reaches Slack (tests/unit/test_notifier.py)
-#   mcp           the Cloud MCP door's grants and scope (tests/unit/test_cloud_mcp.py)
+#   mcp           the Cloud MCP door's grants and scope (tests/unit/test_cloud_mcp.py),
+#                 and its client for Cloud MCP (tests/unit/test_upstream.py)
 #   agreement     the pieces agree: every grant names a read-only tool the
 #                 door has, the agent reads its own run only, the two token
 #                 audiences are the same in admission, the Job template, the
@@ -64,7 +65,13 @@ check_python() {
 
 check_receiver() { python3 tests/unit/test_receiver.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
 check_notifier() { python3 tests/unit/test_notifier.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
-check_mcp() { python3 tests/unit/test_cloud_mcp.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
+check_mcp() {
+  python3 tests/unit/test_cloud_mcp.py 2>&1 | tail -3
+  local door="${PIPESTATUS[0]}"
+  python3 tests/unit/test_upstream.py 2>&1 | tail -3
+  local client="${PIPESTATUS[0]}"
+  [ "$door" -eq 0 ] && [ "$client" -eq 0 ]
+}
 check_models() {
   python3 tests/unit/test_model_reading.py 2>&1 | tail -3
   [ "${PIPESTATUS[0]}" -eq 0 ] || return 1

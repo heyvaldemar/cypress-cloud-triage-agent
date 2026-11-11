@@ -34,7 +34,7 @@ Every line is a check in `tests/e2e/run.sh` or `tests/e2e/models.sh` on a fresh 
 | Every attempt is on record | the doors' logs show the refused tools, the out-of-scope reads and the rate limit with the agent's pod, the post and the refused second message, and every receiver decision |
 | The walls hold when a real model decides | the model leg: Granite-4.0-1B, Qwen3.5-2B and Ministral-3-3B on CPU, three triages each, from images by the flagship's digests, offered Cloud MCP's tools, a shell and a web request; every request outside reaches nothing, screenshots, `run_shell`, other runs and tools the door did not grant are refused, Slack gets at most one defused message per run with Cypress's count first, the outside address gets nothing ([ADR 6](docs/decisions/0006-open-models-beside-the-control.md)) |
 | The model is walled too | it reaches nothing, not even DNS; a pod outside the agents' namespace gets no connection to it; the agents reach it on one port, in that leg only |
-| Every static check can fail | thirty planted violations, each caught: a receiver that checks the signature's shape and not its value, keys replays on the unsigned event ID, takes a future timestamp, coerces a non-numeric one, believes the event header or starts a second triage on a retry; a notifier that lets link syntax through, trusts a lookalike host or lets Slack preview; a door that ignores its grant or the run's scope; an admission plant edited away from the template; the pieces disagreeing; a model that can reach anything or answers another namespace, the agents' way to it on a second port, a harness tool that opens `file://`, a tool no door stands behind, a harness that reads environment admission refuses, a model pinned by name, a reading that counts a copied note as acting on it, a model report or status writer that drops what each model did, and a window that does not add its runs up |
+| Every static check can fail | thirty-two planted violations, each caught: a receiver that checks the signature's shape and not its value, keys replays on the unsigned event ID, takes a future timestamp, coerces a non-numeric one, believes the event header or starts a second triage on a retry; a notifier that lets link syntax through, trusts a lookalike host or lets Slack preview; a door that ignores its grant or the run's scope; a client for Cloud MCP that follows a redirect with the token on it or quotes an error answer; an admission plant edited away from the template; the pieces disagreeing; a model that can reach anything or answers another namespace, the agents' way to it on a second port, a harness tool that opens `file://`, a tool no door stands behind, a harness that reads environment admission refuses, a model pinned by name, a reading that counts a copied note as acting on it, a model report or status writer that drops what each model did, and a window that does not add its runs up |
 
 ## What the models did
 
@@ -141,16 +141,16 @@ manifests/models/     the model leg's model server and its walls
 manifests/model-agent/ the model leg's harness, which does what the model asks
 models/               the three models' pins (the flagship's), the build recipe, the vCPU price
 manifests/stand-ins/  Slack and an outside address, on kind
-scripts/              install, the CI trigger, results to a run, the static checks
+scripts/              install, the CI trigger, results to a run, the static checks, the live probe
 tests/e2e/            the checks against a running cluster, the deliveries and the admission plants
-tests/unit/           the three doors' decisions and the model leg's reading, without a cluster
+tests/unit/           the three doors' decisions, the client for Cloud MCP and the model leg's reading, without a cluster
 tests/static/         the planted violations for the static checks
 docs/                 the threat model and the decisions
 ```
 
 ## Decisions
 
-[`docs/decisions/`](docs/decisions/): a signed `run.completed` as the trigger, sent by the CI job until Cypress Cloud sends it; a door in front of Cloud MCP, scoped to the agent's own run; the notifier writes the facts and defuses the agent's words; a deterministic stand-in agent in CI, not a model; admission holds every triage Job to the receiver's template; open models on CPU beside the stand-in, behind the same walls. Each ends with how the choice would be explained to a customer.
+[`docs/decisions/`](docs/decisions/): a signed `run.completed` as the trigger, sent by the CI job until Cypress Cloud sends it; a door in front of Cloud MCP, scoped to the agent's own run; the notifier writes the facts and defuses the agent's words; a deterministic stand-in agent in CI, not a model; admission holds every triage Job to the receiver's template; open models on CPU beside the stand-in, behind the same walls; a live leg that reads a recorded run back through the real Cloud MCP (proposed). Each ends with how the choice would be explained to a customer.
 
 The same wall-building is in [kubernetes-ai-agent-sandbox](https://github.com/heyvaldemar/kubernetes-ai-agent-sandbox) (what an untrusted agent can reach) and [kubernetes-air-gapped-ai-agent](https://github.com/heyvaldemar/kubernetes-air-gapped-ai-agent) (an agent and its models with no way out, and how often models are fooled). Here the untrusted text comes from a test run.
 
