@@ -1,14 +1,14 @@
 name: Status
 
 # Writes what the e2e workflow has shown lately (scripts/status.py) to the
-# branch `status`, where the README's badges and the fleet read it: green
+# branch `status`, and what the live workflow has (status-live.json, ADR 8), where the README's badges and the fleet read it: green
 # days in the last 30, the streak, and the latest run's checks and
 # measurements. After every e2e run on main, and daily in case one was
 # missed. The branch holds one commit, replaced each time, so main's history
 # stays the code's and nothing here starts the e2e run again.
 on:
   workflow_run:
-    workflows: ["Triage e2e"]
+    workflows: ["Triage e2e", "Live Cloud MCP"]
     types: [completed]
     branches: [main]
   schedule:
@@ -42,6 +42,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           E2E_WORKFLOW: e2e.yml
+          LIVE_WORKFLOW: live.yml
         run: python3 scripts/status.py "$RUNNER_TEMP/status"
 
       - name: Replace the branch `status`

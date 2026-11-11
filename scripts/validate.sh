@@ -11,6 +11,7 @@
 #   notifier      what reaches Slack (tests/unit/test_notifier.py)
 #   mcp           the Cloud MCP door's grants and scope (tests/unit/test_cloud_mcp.py),
 #                 and its client for Cloud MCP (tests/unit/test_upstream.py)
+#   status        what status.py writes for the live leg (tests/unit/test_status.py)
 #   agreement     the pieces agree: every grant names a read-only tool the
 #                 door has, the agent reads its own run only, the two token
 #                 audiences are the same in admission, the Job template, the
@@ -72,6 +73,7 @@ check_mcp() {
   local client="${PIPESTATUS[0]}"
   [ "$door" -eq 0 ] && [ "$client" -eq 0 ]
 }
+check_status() { python3 tests/unit/test_status.py 2>&1 | tail -3; return "${PIPESTATUS[0]}"; }
 check_models() {
   python3 tests/unit/test_model_reading.py 2>&1 | tail -3
   [ "${PIPESTATUS[0]}" -eq 0 ] || return 1
@@ -121,7 +123,7 @@ PY
 }
 
 checks=("$@")
-[ ${#checks[@]} -eq 0 ] && checks=(kubeconform plants images python receiver notifier mcp agreement models)
+[ ${#checks[@]} -eq 0 ] && checks=(kubeconform plants images python receiver notifier mcp status agreement models)
 failed=0
 for c in "${checks[@]}"; do
   if "check_$c"; then echo "-- $c: ok"; else echo "-- $c: FAILED"; failed=1; fi

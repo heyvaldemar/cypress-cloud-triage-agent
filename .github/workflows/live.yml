@@ -68,20 +68,34 @@ jobs:
         env:
           LIVE: "1"
           CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          E2E_RESULTS: ${{ runner.temp }}/e2e-results-unredacted.json
         run: ./tests/e2e/run.sh
 
       # What each door and the agent wrote, with the project taken out. The
       # tokens and secrets are never in these files.
-      - name: Take the project out of the logs
+      - name: Take the project out of the logs and the results
         if: always()
         env:
           CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
         run: |
-          mkdir -p "$RUNNER_TEMP/live-logs"
+          mkdir -p "$RUNNER_TEMP/live-logs" "$RUNNER_TEMP/live-results"
           for f in agent receiver cloud-mcp notifier slack; do
             [ -f "out/$f.log" ] && sed "s/$CYPRESS_PROJECT_ID/<project>/g" "out/$f.log" >"$RUNNER_TEMP/live-logs/$f.log"
           done
+          raw="$RUNNER_TEMP/e2e-results-unredacted.json"
+          [ -f "$raw" ] && sed "s/$CYPRESS_PROJECT_ID/<project>/g" "$raw" >"$RUNNER_TEMP/live-results/e2e-results.json"
+          rm -f "$raw"
           true
+
+      # The checks, for the status workflow (status-live.json).
+      - name: Keep the results for the status workflow
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: ${{ runner.temp }}/live-results/e2e-results.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Keep the logs
         if: always()

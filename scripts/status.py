@@ -17,6 +17,10 @@ when E2E_RESULTS is set). Writes:
     badge-days.json         shields.io endpoint: green days in the window
     badge-checks.json       shields.io endpoint: the latest run's checks
     badge-<measure>.json    one per measurement the run printed
+    status-live.json        with LIVE_WORKFLOW set (live.yml, ADR 8): the same
+                            window for the runs whose live job ran, the
+                            streak of scheduled ones, and the latest run's
+                            checks; a run that ran only the probe is not one
 
 A day counts as green when its last finished run passed; the run count beside
 it shows the failures that rule hides. The streak counts green days back from
@@ -35,6 +39,9 @@ import zipfile
 
 API = "https://api.github.com"
 WINDOW_DAYS = 30
+# The live workflow's job that triages a recorded run; its other job, the
+# probe, triages nothing.
+LIVE_JOB = "A recorded run, triaged through the real Cloud MCP"
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -148,6 +155,67 @@ def models_window(repo, finished):
             "models": models}
 
 
+def days_of(finished):
+    """Days with a run, the green ones (a day's last run passed), the streak."""
+    last_of_day = {}
+    for r in finished:
+        last_of_day[r["created_at"][:10]] = r["conclusion"]
+    days = sorted(last_of_day)
+    green = [d for d in days if last_of_day[d] == "success"]
+    streak = 0
+    for d in reversed(days):
+        if last_of_day[d] != "success":
+            break
+        streak += 1
+    return days, green, streak
+
+
+def live_status(repo, workflow, now):
+    """The live leg (ADR 8): every run on main in the window whose live job
+    ran, by that job's conclusion. A run dispatched with a certificate runs
+    the probe only and is left out. scheduled_streak is the scheduled runs
+    that passed, in a row, back from the latest scheduled one: "daily" is
+    said of the live leg when it is two or more."""
+    since = (now - datetime.timedelta(days=WINDOW_DAYS - 1)).date()
+    finished = []
+    for r in runs(repo, workflow, since):
+        if r["event"] not in ("schedule", "workflow_dispatch") or r["status"] != "completed":
+            continue
+        job = next((j for j in get(f"/repos/{repo}/actions/runs/{r['id']}/jobs")["jobs"] if j["name"] == LIVE_JOB),
+                   None)
+        if job and job.get("conclusion") in ("success", "failure"):
+            finished.append(dict(r, conclusion=job["conclusion"]))
+    finished.sort(key=lambda r: r["created_at"])
+    days, green, streak = days_of(finished)
+    scheduled = [r for r in finished if r["event"] == "schedule"]
+    in_a_row = 0
+    for r in reversed(scheduled):
+        if r["conclusion"] != "success":
+            break
+        in_a_row += 1
+    latest = finished[-1] if finished else None
+    res = results(repo, latest["id"]) if latest else None
+    checks = res["checks"] if res else []
+
+    def ref(r):
+        return {"id": r["id"], "at": r["created_at"], "event": r["event"], "conclusion": r["conclusion"],
+                "url": r["html_url"], "commit": r["head_sha"][:7]}
+
+    return {
+        "repository": repo, "workflow": workflow, "job": LIVE_JOB,
+        "written_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "window_days": WINDOW_DAYS,
+        "days_with_runs": len(days), "green_days": len(green), "streak_days": streak,
+        "runs": len(finished), "runs_passed": sum(1 for r in finished if r["conclusion"] == "success"),
+        "scheduled_runs": len(scheduled), "scheduled_passed": sum(1 for r in scheduled if r["conclusion"] == "success"),
+        "scheduled_streak": in_a_row,
+        "latest": None if not latest else dict(ref(latest), **{
+            "checks_passed": sum(1 for c in checks if c.get("state") == "PASS"),
+            "checks_failed": sum(1 for c in checks if c.get("state") == "FAIL"),
+            "checks": checks, "measured": res["measured"] if res else []}),
+        "recent": [ref(r) for r in reversed(finished[-10:])],
+    }
+
+
 def badge(label, message, color):
     return {"schemaVersion": 1, "label": label, "message": message, "color": color}
 
@@ -161,16 +229,7 @@ def main(out):
                 and r["status"] == "completed" and r["conclusion"] in ("success", "failure")]
     finished.sort(key=lambda r: r["created_at"])
 
-    last_of_day = {}
-    for r in finished:
-        last_of_day[r["created_at"][:10]] = r["conclusion"]
-    days = sorted(last_of_day)
-    green = [d for d in days if last_of_day[d] == "success"]
-    streak = 0
-    for d in reversed(days):
-        if last_of_day[d] != "success":
-            break
-        streak += 1
+    days, green, streak = days_of(finished)
 
     latest = finished[-1] if finished else None
     res = results(repo, latest["id"]) if latest else None
@@ -223,6 +282,11 @@ def main(out):
         if value:
             slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
             json.dump(badge(name, value.split(" (")[0], "blue"), open(os.path.join(out, f"badge-{slug}.json"), "w"))
+    if os.environ.get("LIVE_WORKFLOW"):
+        live = live_status(repo, os.environ["LIVE_WORKFLOW"], now)
+        with open(os.path.join(out, "status-live.json"), "w") as f:
+            json.dump(live, f, indent=2)
+        print(f"{repo} live: {live['runs_passed']} of {live['runs']} runs, scheduled in a row {live['scheduled_streak']}")
     print(f"{repo}: {len(green)} of {len(days)} days green, streak {streak}, "
           f"latest {latest['conclusion'] if latest else 'none'} with {passed} of {passed + failed} checks")
 
