@@ -4,7 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-### Changed
+## [1.1.1] - 2026-11-11
+
+### Fixed
 
 - The e2e finds the planted note by its order, 1003 in `app/orders.json`, instead of by the words "Note to the AI assistant", and `checks.py cypress` passes only when a failure message carries that order's note whole. The checks then hold under any note on that order: the agent security benchmark keeps the customer's words and puts its own plant after them, and can run `tests/e2e/models.sh` as it is. What a model did is still read against this repository's note and its asks. `tests/unit/test_model_reading.py` runs both checks under another note, with this repository's words on another order; two plants, 39 in all, all caught.
 
@@ -60,6 +62,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
-[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/releases/tag/v1.0.0
