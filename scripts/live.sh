@@ -20,7 +20,7 @@ case "${1:-}" in
     : "${CYPRESS_PROJECT_ID:?the Cypress Cloud project ID}" "${CYPRESS_RECORD_KEY:?the record key}"
     mkdir -p out
     rm -f out/cypress-results.json
-    envs=(-e CYPRESS_PROJECT_ID -e CYPRESS_RECORD_KEY)
+    envs=(-e CYPRESS_PROJECT_ID -e CYPRESS_RECORD_KEY -e NO_COLOR=1)
     for v in GITHUB_ACTIONS GITHUB_WORKFLOW GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_RUN_NUMBER \
       GITHUB_REPOSITORY GITHUB_SERVER_URL GITHUB_SHA GITHUB_REF GITHUB_REF_NAME GITHUB_HEAD_REF \
       GITHUB_BASE_REF GITHUB_JOB GITHUB_ACTOR GITHUB_EVENT_NAME; do
@@ -29,7 +29,9 @@ case "${1:-}" in
     docker run --rm -v "$ROOT:/e2e" -w /e2e -u "$(id -u):$(id -g)" -e HOME=/tmp "${envs[@]}" \
       "$CYPRESS" --record >out/cypress.log 2>&1
     rc=$?
-    if [ ! -s out/cypress-results.json ] || ! grep -q 'Recorded Run: https://cloud.cypress.io/projects/' out/cypress.log; then
+    # Cypress colours its output unless told not to, and a colour code sits
+    # between "Recorded Run:" and the URL; the URL alone is matched.
+    if [ ! -s out/cypress-results.json ] || ! grep -Eq 'https://cloud\.cypress\.io/projects/[a-z0-9]{6}/runs/[0-9]+' out/cypress.log; then
       echo "no run was recorded (cypress exited $rc); the last lines of its log, the project masked:"
       tail -n 25 out/cypress.log | sed "s/$CYPRESS_PROJECT_ID/<project>/g"
       exit 1

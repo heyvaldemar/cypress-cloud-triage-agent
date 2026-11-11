@@ -42,7 +42,7 @@ def recorded_run(results_path, log_path):
     if not RUN_URL.fullmatch(url) and os.path.exists(log_path):
         with open(log_path, encoding="utf-8", errors="replace") as f:
             m = RUN_URL.search(f.read())
-        url = m.group(0) if m else ""
+        url = m.group(0) if m else ""  # colour codes, if any, sit outside the URL
     m = RUN_URL.fullmatch(url)
     if not m:
         sys.exit("no recorded run in %s or %s" % (results_path, log_path))
