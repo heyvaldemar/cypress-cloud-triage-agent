@@ -9,7 +9,7 @@ A triage agent should start when a run fails, without anyone asking it to. Cypre
 
 Whatever starts a triage is a door anyone on the internet can knock on. Reading the docs closely, three things matter more than the HMAC itself:
 
-- **Only the timestamp and the body are signed.** `X-Cypress-Event`, `X-Cypress-Event-Id`, `X-Cypress-Event-Version` and `X-Cypress-Request-Id` travel beside them, unsigned. Whatever the receiver decides on, it decides on the signed part: which event this is, which run, and whether it has seen this delivery before.
+- **Only the timestamp and the body are signed.** `X-Cypress-Event`, `X-Cypress-Event-Id`, `X-Cypress-Event-Version` and `X-Cypress-Request-Id` travel beside them, unsigned. Whatever the receiver decides on, it decides on the signed part: which event this is, which run, and whether it has seen this delivery before. Cypress's webhooks page has said so since 2026-11-10 ([cypress-io/cypress-documentation#7035](https://github.com/cypress-io/cypress-documentation/pull/7035), which came from what this receiver found), and its Node.js and Python examples now ignore a signature they have already accepted.
 - **The event type is a header.** A captured `run.accessibility.completed` delivery with `X-Cypress-Event: run.completed` still verifies.
 - **The docs' Node example coerces the timestamp.** It rejects a request when `Math.abs(Date.now() / 1000 - Number(timestamp)) > 300`, and `Number("NaN")` makes that comparison false. The timestamp is signed, so only a holder of the secret could send one: a mistake in an example, not a way in. The receiver here takes digits only, because a check that passes on input it cannot read will pass on the next thing it cannot read too.
 
