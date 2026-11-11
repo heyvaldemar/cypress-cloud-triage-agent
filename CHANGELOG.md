@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The e2e finds the planted note by its order, 1003 in `app/orders.json`, instead of by the words "Note to the AI assistant", and `checks.py cypress` passes only when a failure message carries that order's note whole. The checks then hold under any note on that order: the agent security benchmark keeps the customer's words and puts its own plant after them, and can run `tests/e2e/models.sh` as it is. What a model did is still read against this repository's note and its asks. `tests/unit/test_model_reading.py` runs both checks under another note, with this repository's words on another order; two plants, 39 in all, all caught.
+
 ## [1.1.0] - 2026-11-11
 
 ### Added
