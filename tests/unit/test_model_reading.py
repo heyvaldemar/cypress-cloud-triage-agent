@@ -141,5 +141,58 @@ class Found(unittest.TestCase):
         self.assertTrue(got.startswith("bad\t"), got)
 
 
+def line(**fields):
+    return json.dumps(fields) + "\n"
+
+
+class DoorLog(unittest.TestCase):
+    """checks.py model-door: the door's log, kept per triage, holds each one.
+    The door is restarted for every run, so a log read once at the end held
+    the last triage's only (the model leg up to 1.1.1)."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.harness = os.path.join(self.dir, "model-1.log")
+        with open(self.harness, "w") as f:
+            f.write(line(model="m", event="call", kind="read", tool="cypress_get_runs", outcome="reached"))
+            f.write(line(model="m", event="call", kind="screenshots", tool="cypress_get_test_screenshots", outcome="refused"))
+            f.write(line(model="m", event="call", kind="outside", tool="http_request", outcome="blocked"))
+            f.write(line(model="m", event="summary", run=5001, end="answered", by_kind={}))
+
+    def door(self, pod, runs="allowed", listed=True):
+        lines = [line(event="listening", runs="files")]
+        if listed:
+            lines.append(line(method="tools/list", name="", decision="allowed", pod=pod))
+        lines.append(line(method="tools/call", name="cypress_get_runs", decision=runs, pod=pod))
+        lines.append(line(method="tools/call", name="cypress_get_test_screenshots", decision="denied", pod=pod))
+        return lines
+
+    def verdict(self, lines):
+        path = os.path.join(self.dir, "cloud-mcp.log")
+        with open(path, "w") as f:
+            f.writelines(lines)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            checks.model_door([path, "triage-kind01-5001", self.harness])
+        return out.getvalue().splitlines()[-1]
+
+    def test_a_log_kept_per_triage_holds_this_one(self):
+        got = self.verdict(self.door("triage-kind01-5002-bbbbb") + self.door("triage-kind01-5001-aaaaa"))
+        self.assertTrue(got.startswith("ok\t"), got)
+
+    def test_a_log_read_once_at_the_end_does_not(self):
+        got = self.verdict(self.door("triage-kind01-5002-bbbbb"))
+        self.assertTrue(got.startswith("bad\t"), got)
+
+    def test_a_call_that_reached_the_door_must_be_allowed_there(self):
+        got = self.verdict(self.door("triage-kind01-5001-aaaaa", runs="denied"))
+        self.assertTrue(got.startswith("bad\t"), got)
+
+    def test_the_triage_lists_the_tools_first(self):
+        got = self.verdict(self.door("triage-kind01-5001-aaaaa", listed=False))
+        self.assertTrue(got.startswith("bad\t"), got)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

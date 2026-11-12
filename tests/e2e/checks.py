@@ -7,6 +7,7 @@
     tests/e2e/checks.py live POD PROJECT RUN  out/cloud-mcp.log of the live leg: what reached Cloud MCP
     tests/e2e/checks.py model-triage LOG               the model leg: the harness's triage ended, walled
     tests/e2e/checks.py model-slack PROJECT RUN POSTED the model leg: what reached Slack for one run
+    tests/e2e/checks.py model-door DOORLOG JOB LOG     the model leg: the door's kept log has one triage
     tests/e2e/checks.py model-report MODEL DIGEST LOG... the model leg's measured lines, as JSON
 
 Each line is "ok" or "bad", a tab, and what was checked; tests/e2e/run.sh
@@ -236,6 +237,44 @@ def model_slack(argv):
             "ok" if m.get("unfurl_links") is False and m.get("unfurl_media") is False else "bad", run))
 
 
+def model_door(argv):
+    """model-door DOORLOG JOB LOG: the door's log, kept across the leg's
+    triages, holds this one: the tools/list its pod made first, and each call
+    the harness sent the door, by tool, with a call that reached it allowed.
+
+    scripts/load-run.sh restarts the door for every run, so its log is kept
+    once per triage, before the next load; read once at the end, it held the
+    last triage's only."""
+    door_log, job, log = argv
+    s = summary_of(log)
+    if not s:
+        print("bad\tthe door's kept log: the triage of %s wrote no summary (%s)" % (job, log))
+        return
+    calls = [json.loads(l) for l in open(log, encoding="utf-8", errors="replace")
+             if l.startswith("{") and '"event": "call"' in l]
+    sent = [c for c in calls if c.get("tool") != "http_request" and c.get("outcome") not in ("not offered", "unreachable")]
+    audit = [json.loads(l) for l in open(door_log, encoding="utf-8", errors="replace") if l.startswith("{")]
+    audit = [a for a in audit if str(a.get("pod", "")).startswith(job + "-")]
+    listed = any(a.get("method") == "tools/list" for a in audit)
+    logged = {}
+    for a in audit:
+        if a.get("method") == "tools/call":
+            t = logged.setdefault(a.get("name"), {"all": 0, "allowed": 0})
+            t["all"] += 1
+            t["allowed"] += a.get("decision") == "allowed"
+    missing = []
+    for tool in sorted({c["tool"] for c in sent}):
+        mine = [c for c in sent if c["tool"] == tool]
+        got = logged.get(tool, {"all": 0, "allowed": 0})
+        reached = sum(1 for c in mine if c.get("outcome") == "reached")
+        if got["all"] < len(mine) or got["allowed"] < reached:
+            missing.append("%s: %d sent, %d reached; the door logged %d, %d allowed" % (
+                tool, len(mine), reached, got["all"], got["allowed"]))
+    print("%s\t%s, run %d: the door's kept log has this triage, its tools/list and the %d calls it was sent%s" % (
+        "ok" if listed and not missing else "bad", s["model"], s["run"], len(sent),
+        "" if listed and not missing else " (%s)" % ("; ".join(missing) if missing else "no tools/list from its pod")))
+
+
 def model_report(argv):
     """model-report MODEL DIGEST LOG...: the measured lines and the model's
     block for e2e-results, as JSON on stdout."""
@@ -292,4 +331,4 @@ def model_report(argv):
 
 if __name__ == "__main__":
     {"cypress": cypress, "slack": slack, "doors": doors, "model-triage": model_triage,
-     "model-slack": model_slack, "model-report": model_report, "live": live}[sys.argv[1]](sys.argv[2:])
+     "model-slack": model_slack, "model-door": model_door, "model-report": model_report, "live": live}[sys.argv[1]](sys.argv[2:])

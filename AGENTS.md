@@ -46,7 +46,7 @@ Dependabot reads only the actions. Everything else is moved by hand, with the ne
 
 ## Numbers
 
-The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, thirty-nine planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
+The second row of README badges is written by `.github/workflows/status.yml` (`scripts/status.py`) to the `status` branch, from the e2e runs on main and their `e2e-results` artifacts. It is never edited by hand. The counts the README states (twenty refused Jobs and one admitted, forty-one planted violations, the 620-character note) are the counts in `tests/e2e/plants/`, `tests/static/plants.tsv` and `app/orders.json`, and change with them in the same commit. The Slack message in the README is pasted from a run on kind, not written, and says which run. When a check fails on one run and passes on the next, find what changed before calling it noise.
 
 ## Releases
 

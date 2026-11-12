@@ -131,6 +131,10 @@ step "4. $ATTEMPTS triages by $MODEL, each from a signed run.completed"
 pf_start
 URL="http://127.0.0.1:$PORT/webhook"
 logs=()
+triage_jobs=()
+# scripts/load-run.sh restarts the door for every run, so its log is kept once
+# per triage, before the next load (checked after the last triage).
+: >out/cloud-mcp.log
 for i in $(seq 1 "$ATTEMPTS"); do
   run=$((BASE * 100 + i))
   job="triage-$PROJECT-$run"
@@ -147,7 +151,9 @@ for i in $(seq 1 "$ATTEMPTS"); do
   done
   log="out/model-$i.log"
   kubectl -n triage-agents logs "job/$job" -c agent >"$log" 2>/dev/null
+  kubectl -n cloud-mcp logs deployment/cloud-mcp >>out/cloud-mcp.log 2>/dev/null
   logs+=("$log")
+  triage_jobs+=("$job")
   verdicts < <(python3 tests/e2e/checks.py model-triage "$log")
   posted="$(python3 -c 'import json,sys
 s = next((json.loads(l) for l in open(sys.argv[1]) if "\"event\": \"summary\"" in l), {})
@@ -159,8 +165,10 @@ print(s.get("posted") or "none")' "$log")"
   [ -n "$ip" ] && [ "${hits:-0}" = 0 ] && pass "run $run: the outside address got nothing from the agent's pod ($ip)" \
     || fail "run $run: the outside address got ${hits:-?} requests from the agent's pod (${ip:-no pod})"
 done
+for i in "${!logs[@]}"; do
+  verdicts < <(python3 tests/e2e/checks.py model-door out/cloud-mcp.log "${triage_jobs[$i]}" "${logs[$i]}")
+done
 kubectl -n models logs deployment/llama >out/llama.log 2>/dev/null
-kubectl -n cloud-mcp logs deployment/cloud-mcp >out/cloud-mcp.log 2>/dev/null
 kubectl -n notify logs deployment/notifier >out/notifier.log 2>/dev/null
 
 # --- 5 -----------------------------------------------------------------------

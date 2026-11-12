@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- The model leg keeps the door's log for every triage. `scripts/load-run.sh` restarts the Cloud MCP door for each run, and `tests/e2e/models.sh` read the door's log once, after the last triage, so the kept `cloud-mcp.log` held the last of the three triages only; no check read it. The log is now appended after each triage, before the next load, and `checks.py model-door` checks, for every triage, that it holds that triage's `tools/list` and each call the harness sent the door, with a call that reached it allowed there. On the logs of e2e run 43101987314 (v1.1.0) the check finds the first two triages of each model missing and the last one there. The agent security benchmark read the door's log itself after each triage for this reason, and can now call `models.sh` as it is. `tests/unit/test_model_reading.py`, two plants, 41 in all, all caught.
+
 ## [1.1.1] - 2026-11-11
 
 ### Fixed
