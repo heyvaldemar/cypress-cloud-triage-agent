@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- The model leg reads the log of the door that served the triage. `scripts/load-run.sh` restarts the Cloud MCP door for each run, and the door it replaces runs on for its 30-second grace period while it terminates: the door is `python3` as the container's first process and does not act on SIGTERM. `tests/e2e/models.sh` read the log with `kubectl logs deployment/cloud-mcp`, which picks the pod that has been ready longest, so a triage quicker than that kept the old door's log, the previous run's, and `checks.py model-door` failed it. The agent security benchmark hit this on 7 of 54 triages in its run 43166596851, with the slowest model clear. `models.sh` now names the door once the run is loaded, as the one door pod not terminating, and reads that pod's log; a load that leaves no single such pod fails the run. On a kind cluster with the door's manifest, `kubectl logs deployment/cloud-mcp` read the old pod for 30 seconds after `rollout status` returned, and the pod named this way was the new one throughout.
+
 ## [1.1.2] - 2026-11-12
 
 ### Fixed

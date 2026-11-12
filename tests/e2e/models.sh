@@ -133,12 +133,28 @@ URL="http://127.0.0.1:$PORT/webhook"
 logs=()
 triage_jobs=()
 # scripts/load-run.sh restarts the door for every run, so its log is kept once
-# per triage, before the next load (checked after the last triage).
+# per triage, before the next load (checked after the last triage). The door
+# it replaced stays up for its grace period, 30 seconds, while it terminates,
+# and `kubectl logs deployment/cloud-mcp` reads the pod that has been ready
+# longest: the old door. A triage quicker than that kept the previous run's log
+# instead of its own. So the door that serves the run is named once the run is
+# loaded, as the one door pod not terminating, and its log is read by name.
+NOT_TERMINATING='{{range .items}}{{if not .metadata.deletionTimestamp}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}'
+serving_door() {
+  local names
+  for _ in 1 2 3 4 5; do
+    names="$(kubectl -n cloud-mcp get pods -l app.kubernetes.io/name=cloud-mcp -o go-template="$NOT_TERMINATING" 2>/dev/null)"
+    [ -n "$names" ] && [ "$(wc -l <<<"$names")" -eq 1 ] && { printf '%s\n' "$names"; return 0; }
+    sleep 1
+  done
+  return 1
+}
 : >out/cloud-mcp.log
 for i in $(seq 1 "$ATTEMPTS"); do
   run=$((BASE * 100 + i))
   job="triage-$PROJECT-$run"
   ./scripts/load-run.sh "$PROJECT" "$run" >/dev/null || { fail "run $run could not be loaded into the Cloud MCP stand-in"; continue; }
+  door="$(serving_door)" || { fail "run $run: the door serving it could not be named, as the one Cloud MCP pod not terminating"; continue; }
   pf_ensure
   answer="$(secret | python3 scripts/send-run.py "$URL" out/run-completed.json)"
   [[ "$answer" == "HTTP 202"* ]] && pass "run $run: the signed delivery started a triage" \
@@ -151,7 +167,7 @@ for i in $(seq 1 "$ATTEMPTS"); do
   done
   log="out/model-$i.log"
   kubectl -n triage-agents logs "job/$job" -c agent >"$log" 2>/dev/null
-  kubectl -n cloud-mcp logs deployment/cloud-mcp >>out/cloud-mcp.log 2>/dev/null
+  kubectl -n cloud-mcp logs "pod/$door" >>out/cloud-mcp.log 2>/dev/null
   logs+=("$log")
   triage_jobs+=("$job")
   verdicts < <(python3 tests/e2e/checks.py model-triage "$log")
