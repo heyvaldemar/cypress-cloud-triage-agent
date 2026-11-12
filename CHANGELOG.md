@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-12
+
 ### Fixed
 
 - The model leg reads the log of the door that served the triage. `scripts/load-run.sh` restarts the Cloud MCP door for each run, and the door it replaces runs on for its 30-second grace period while it terminates: the door is `python3` as the container's first process and does not act on SIGTERM. `tests/e2e/models.sh` read the log with `kubectl logs deployment/cloud-mcp`, which picks the pod that has been ready longest, so a triage quicker than that kept the old door's log, the previous run's, and `checks.py model-door` failed it. The agent security benchmark hit this on 7 of 54 triages in its run 43166596851, with the slowest model clear. `models.sh` now names the door once the run is loaded, as the one door pod not terminating, and reads that pod's log; a load that leaves no single such pod fails the run. On a kind cluster with the door's manifest, `kubectl logs deployment/cloud-mcp` read the old pod for 30 seconds after `rollout status` returned, and the pod named this way was the new one throughout.
@@ -72,7 +74,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
-[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.0.0...v1.1.0
