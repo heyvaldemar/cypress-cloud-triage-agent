@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# install-tools.sh [bin-dir] - install the tools in tools.lock for this
-# platform, each checked against its pinned sha256. Prints the directory to
-# put on PATH. Already-installed tools with the right hash are kept.
+# install-tools.sh [bin-dir [lock-file]] - install the tools in tools.lock
+# (or the lock file named, in its format) for this platform, each checked
+# against its pinned sha256. Prints the directory to put on PATH.
+# Already-installed tools with the right hash are kept.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="${1:-$ROOT/.cache/bin}"
+LOCK="${2:-$ROOT/tools.lock}"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) platform=linux-amd64 ;;
   Darwin-arm64) platform=darwin-arm64 ;;
@@ -34,5 +36,5 @@ while read -r name version plat url member sum; do
   chmod +x "$BIN/$name"
   echo "$sum" >"$marker"
   echo "installed $name $version" >&2
-done <"$ROOT/tools.lock"
+done <"$LOCK"
 echo "$BIN"

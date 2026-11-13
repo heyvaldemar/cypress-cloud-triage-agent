@@ -5,6 +5,7 @@
     scripts/live-up.py egress IP...        the door's one way out: those addresses, port 443
     scripts/live-up.py door IP...          the door's patch: forward, read the token, pin the name
     scripts/live-up.py receiver            the receiver's patch: the project in CYPRESS_PROJECT_ID
+    scripts/live-up.py signing < secret    the webhook's signing secret, the receiver's (ADR 9)
 
 scripts/live.sh up hands each to kubectl, the token on stdin, as
 scripts/install.sh does with the signing secret. A NetworkPolicy names
@@ -60,6 +61,19 @@ def door(argv):
     }}}}
 
 
+def signing(_):
+    # The secret set on the webhook in Cypress Cloud, in place of the one
+    # scripts/install.sh generated, so the receiver verifies Cypress Cloud's
+    # own deliveries. Cypress Cloud asks for 16 characters at least, and so
+    # does the receiver.
+    secret = sys.stdin.readline().strip()
+    if len(secret) < 16 or any(c.isspace() for c in secret):
+        sys.exit("no signing secret on stdin, or one shorter than 16 characters or with spaces in it")
+    return {"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
+            "metadata": {"name": "webhook-signing", "namespace": "triage"},
+            "stringData": {"secret": secret}}
+
+
 def receiver(_):
     project = os.environ.get("CYPRESS_PROJECT_ID", "")
     if not re.fullmatch(r"[a-z0-9]{6}", project):
@@ -69,7 +83,7 @@ def receiver(_):
 
 
 if __name__ == "__main__":
-    modes = {"secret": secret, "egress": egress, "door": door, "receiver": receiver}
+    modes = {"secret": secret, "egress": egress, "door": door, "receiver": receiver, "signing": signing}
     if len(sys.argv) < 2 or sys.argv[1] not in modes:
         sys.exit(__doc__)
     json.dump(modes[sys.argv[1]](sys.argv[2:]), sys.stdout)

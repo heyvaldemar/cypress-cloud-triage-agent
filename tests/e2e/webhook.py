@@ -3,6 +3,7 @@
 
     tests/e2e/webhook.py before URL BODY_FILE < signing-secret
     tests/e2e/webhook.py after URL BODY_FILE DELIVERY_FILE < signing-secret
+    tests/e2e/webhook.py public URL DELIVERY_FILE
 
 `before` runs ahead of the real delivery: forged, unsigned, altered, stale
 and malformed requests, each refused, and none may start a triage. `after`
@@ -11,6 +12,12 @@ the exact delivery again, the same with a new X-Cypress-Event-Id (a header
 the signature does not cover), and a retry with a new timestamp. None may
 start a second triage. tests/unit/test_receiver.py holds the same cases
 against the code; this holds them against the deployed door.
+
+`public` runs in the live leg's webhook mode (ADR 9), at the tunnel's public
+URL, from Cypress Cloud's own delivery: that delivery sent again, the same
+with a new X-Cypress-Event-Id, then without its signature and with one
+byte of its body changed. Each is refused there, by the receiver, after
+crossing the internet the way Cypress Cloud's did.
 
 One JSON line per request; exit status 1 if any answer differs.
 """
@@ -101,7 +108,26 @@ def after(url, delivery_file, secret):
     expect("a retry of the same run, signed with a new timestamp", (200, "duplicate"), post(url, raw, signed(secret, raw)))
 
 
+def public(url, delivery_file):
+    with open(delivery_file, encoding="utf-8") as f:
+        d = json.load(f)
+    raw, headers = d["body"].encode(), dict(d["headers"], **{"User-Agent": "cypress-cloud-triage-agent-e2e"})
+    expect("at the public URL, Cypress Cloud's delivery sent again", (409, "replayed"), post(url, raw, headers))
+    expect("at the public URL, the same delivery with a new X-Cypress-Event-Id", (409, "replayed"),
+           post(url, raw, dict(headers, **{"X-Cypress-Event-Id": "a-new-id", "X-Cypress-Request-Id": "a-new-id",
+                                           "X-Cypress-Idempotency-Key": "a-new-id"})))
+    unsigned = {k: v for k, v in headers.items() if k.lower() not in ("x-cypress-signature", "x-cypress-timestamp")}
+    expect("at the public URL, the delivery without its signature", (401, "unsigned"), post(url, raw, unsigned))
+    i = raw.find(b'"runNumber"')
+    altered = raw[:i] + b" " + raw[i:] if i > 0 else raw + b" "
+    expect("at the public URL, the delivery with one byte added to its body", (401, "bad_signature"),
+           post(url, altered, headers))
+
+
 def main():
+    if sys.argv[1] == "public":
+        public(*sys.argv[2:4])
+        sys.exit(1 if failed else 0)
     phase, url, body_file = sys.argv[1:4]
     secret = sys.stdin.readline().strip().encode()
     with open(body_file, encoding="utf-8") as f:

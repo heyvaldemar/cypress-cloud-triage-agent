@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The live job's webhook mode (ADR 9, proposed until the first live delivery). With the tunnel's token, its hostname and the webhook's signing secret set in the `cypress-cloud` environment (`CLOUDFLARE_TUNNEL_TOKEN`, `WEBHOOK_HOST`, `CYPRESS_WEBHOOK_SECRET`), the stack comes up before the spec is recorded, the receiver takes the webhook's secret (`scripts/live.sh signing`), and a named Cloudflare tunnel opens it at a public HTTPS URL for as long as the job runs (`scripts/live.sh tunnel`, with cloudflared pinned in `tunnel.lock` and its token read from a file, never a command line). Cypress Cloud's own delivery starts the triage, and the CI trigger sends nothing. `tests/e2e/run.sh` with `DELIVERY` set checks that the delivery for the recorded run started a triage and came as Cypress documents it, then sends it again at the public URL: as is and with a new event ID, 409; unsigned and with a byte added, 401; none starts a Job. Every Job must be one for a run Cypress Cloud delivered. With none of the three secrets set, the job runs as before; with some, it fails.
+- `tests/e2e/tap.py`, where the tunnel ends on the runner: it hands each request to the receiver unchanged and keeps each delivery in a file of the job's own (mode 600, never uploaded). `tests/unit/test_delivery.py` and three planted violations, forty-four in all.
+- `scripts/install-tools.sh` takes a lock file to install from; `scripts/check-freshness.py` reads `tunnel.lock` too.
+
 ## [1.1.3] - 2026-11-12
 
 ### Fixed

@@ -20,8 +20,8 @@ aws-eks-reference-platform has its own, which also renders its charts.
              the tag resolves to now: a moved tag is a rebuilt image nobody
              here has run. The planted-violation table is left out; its rows
              are deliberate edits
-  tools      tools.lock against each tool's newest release; kubectl against
-             the newest patch of the minor it targets
+  tools      tools.lock and tunnel.lock against each tool's newest release;
+             kubectl against the newest patch of the minor it targets
   ci images  ci-images.pins, as images
   gvisor     gvisor.lock, where there is one, against gVisor's newest release
 
@@ -43,6 +43,7 @@ TOOL_RELEASES = {
     "cosign": ("sigstore/cosign", r"(v\d+\.\d+\.\d+)"),
     "helm": ("helm/helm", r"(v\d+\.\d+\.\d+)"),
     "kubeconform": ("yannh/kubeconform", r"(v\d+\.\d+\.\d+)"),
+    "cloudflared": ("cloudflare/cloudflared", r"(\d+\.\d+\.\d+)"),
 }
 REF = re.compile(r"([\w.-]+(?:/[\w.-]+)+:[\w.-]+@sha256:[0-9a-f]{64})")
 
@@ -210,14 +211,15 @@ def check_ci_images():
 
 
 def check_tools():
-    path = os.path.join(ROOT, "tools.lock")
-    if not os.path.exists(path):
-        return
     seen = {}
-    for line in open(path, encoding="utf-8"):
-        if line.strip() and not line.startswith("#"):
-            name, version = line.split()[:2]
-            seen[name] = version
+    for lock in ("tools.lock", "tunnel.lock"):
+        path = os.path.join(ROOT, lock)
+        if not os.path.exists(path):
+            continue
+        for line in open(path, encoding="utf-8"):
+            if line.strip() and not line.startswith("#"):
+                name, version = line.split()[:2]
+                seen[name] = version
     for name, pinned in sorted(seen.items()):
         if name == "kubectl":
             # kubectl follows the targeted Kubernetes minor, not the newest one.

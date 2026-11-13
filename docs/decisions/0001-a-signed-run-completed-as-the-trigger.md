@@ -27,7 +27,7 @@ Until the project is on a plan with webhooks, the last step of the CI job that r
 
 ## Consequences
 
-- One code path for both triggers. The e2e run exercises the one the project has today; the day it gets a webhook, nothing in the cluster changes.
+- One code path for both triggers. The e2e run exercises the one the project has today; the day it gets a webhook, nothing in the cluster changes. ADR 9 is that day for the live leg: with the webhook set up, Cypress Cloud's delivery starts the live triage through a tunnel and the CI trigger sends nothing there. The kind e2e keeps the CI trigger, since no Cypress Cloud sends to it.
 - The live webhook is not claimed. This repository verifies the receiver against the body and signature the docs describe and a body built from a real Cypress run (`scripts/results-to-run.py`), not against a delivery from Cypress Cloud. That claim waits for a run on a paid plan.
 - The CI trigger puts the signing secret in the CI system's secrets. Anyone who can run a step there can start a triage, which is no more than they can do by pushing a failing test.
 - The replay cache and the started set are in memory, in one replica. A restart forgets them; the Job name still stops a second triage of the same run.

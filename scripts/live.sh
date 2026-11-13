@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# scripts/live.sh record | up - the live leg's two steps (ADR 8).
+# scripts/live.sh record | up | signing | tunnel - the live leg's steps
+# (ADR 8; signing and tunnel are its webhook mode, ADR 9).
 #
 # record: runs the same spec in the same pinned image as tests/e2e/run.sh, with
 # --record, into the project CYPRESS_PROJECT_ID names, with the record key in
@@ -17,6 +18,22 @@
 # cloud-mcp only; the door's egress is mcp.cypress.io's addresses on 443,
 # and its pod is given those addresses for the name; the receiver serves the
 # project in CYPRESS_PROJECT_ID instead of kind01.
+#
+# signing < secret: before up, the secret set on the webhook in Cypress Cloud
+# becomes the receiver's signing secret (scripts/live-up.py signing), in place
+# of the one scripts/install.sh generated. up restarts the receiver, which
+# then reads it.
+#
+# tunnel < token: after up, the receiver at a public HTTPS URL for as long as
+# the job runs (ADR 9). The token of the named Cloudflare tunnel goes to a
+# file only this user reads, which cloudflared reads (--token-file), never a
+# command line. cloudflared, pinned in tunnel.lock, hands what reaches
+# WEBHOOK_HOST to tests/e2e/tap.py on 127.0.0.1:18091, which passes it to the
+# receiver through a port-forward on 18090 and keeps each delivery in
+# $RUNNER_TEMP/tunnel/deliveries.jsonl. This exits 0 once the receiver answers
+# its health check at https://WEBHOOK_HOST/healthz, and 1 otherwise, saying
+# what answered instead: a redirect there is the zone's own forwarding rule
+# catching the hostname.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$(pwd)"
@@ -65,8 +82,47 @@ case "${1:-}" in
     kubectl -n triage rollout status deployment/receiver --timeout=120s >/dev/null || exit 1
     echo "the door forwards to Cloud MCP, reaching ${ips[*]} on 443 and nothing else outside; the receiver serves the recorded project"
     ;;
+  signing)
+    python3 scripts/live-up.py signing | kubectl apply -f - >/dev/null || exit 1
+    echo "the receiver's signing secret is the webhook's, in triage only"
+    ;;
+  tunnel)
+    : "${WEBHOOK_HOST:?the hostname of the tunnel}" "${RUNNER_TEMP:?a directory the job owns}"
+    dir="$RUNNER_TEMP/tunnel"
+    mkdir -p "$dir" && chmod 700 "$dir" || exit 1
+    (umask 077 && head -n 1 >"$dir/token")
+    [ -s "$dir/token" ] || { echo "no tunnel token on stdin"; exit 1; }
+    bin="$(scripts/install-tools.sh "$ROOT/.cache/tunnel-bin" "$ROOT/tunnel.lock")" || exit 1
+    [ -x "$bin/cloudflared" ] || { echo "tunnel.lock has no cloudflared for this platform"; exit 1; }
+    # These run on for the rest of the job, so none keeps this step's output
+    # or its stdin, which held the token. kubectl port-forward exits when a
+    # forwarded connection breaks, so it is brought back each time.
+    (while :; do kubectl -n triage port-forward service/receiver 18090:8080; sleep 1; done) </dev/null >/dev/null 2>&1 &
+    python3 -I tests/e2e/tap.py 18091 18090 "$dir/deliveries.jsonl" </dev/null >"$dir/tap.log" 2>&1 &
+    "$bin/cloudflared" tunnel --no-autoupdate --metrics 127.0.0.1:18092 --logfile "$dir/cloudflared.log" \
+      run --token-file "$dir/token" </dev/null >/dev/null 2>&1 &
+    ready=""
+    for _ in $(seq 1 60); do
+      curl -fs -o /dev/null http://127.0.0.1:18092/ready && { ready=1; break; }
+      sleep 1
+    done
+    [ -n "$ready" ] || { echo "cloudflared did not connect the tunnel in 60 seconds"; exit 1; }
+    got=""
+    for _ in $(seq 1 30); do
+      got="$(curl -s -o "$dir/healthz" -w '%{http_code}' --max-time 10 "https://$WEBHOOK_HOST/healthz")"
+      [ "$got" = 200 ] && [ "$(cat "$dir/healthz")" = '{"ok": true}' ] && break
+      sleep 2
+    done
+    case "$got" in
+      200) [ "$(cat "$dir/healthz")" = '{"ok": true}' ] \
+             || { echo "the public URL answered 200, but not with the receiver's health check"; exit 1; } ;;
+      30?) echo "the public URL answered $got: a redirect rule of the zone catches the tunnel's hostname"; exit 1 ;;
+      *) echo "the public URL answered ${got:-nothing} instead of the receiver's health check"; exit 1 ;;
+    esac
+    echo "the receiver answers at the tunnel's public URL, over HTTPS, for as long as this job runs"
+    ;;
   *)
-    echo "usage: scripts/live.sh record | up < token" >&2
+    echo "usage: scripts/live.sh record | up < token | signing < secret | tunnel < token" >&2
     exit 2
     ;;
 esac

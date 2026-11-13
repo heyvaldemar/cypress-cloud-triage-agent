@@ -5,6 +5,7 @@
     tests/e2e/checks.py slack PROJECT RUN  out/slack.log: what reached Slack
     tests/e2e/checks.py doors POD        out/{cloud-mcp,notifier,receiver}.log: the doors' decisions
     tests/e2e/checks.py live POD PROJECT RUN  out/cloud-mcp.log of the live leg: what reached Cloud MCP
+    tests/e2e/checks.py delivery FILE PROJECT RUN WAIT  the live leg's webhook mode: Cypress Cloud's delivery
     tests/e2e/checks.py model-triage LOG               the model leg: the harness's triage ended, walled
     tests/e2e/checks.py model-slack PROJECT RUN POSTED the model leg: what reached Slack for one run
     tests/e2e/checks.py model-door DOORLOG JOB LOG     the model leg: the door's kept log has one triage
@@ -20,6 +21,7 @@ import html
 import json
 import re
 import sys
+import time
 
 
 def cypress(argv):
@@ -113,6 +115,64 @@ def live(argv):
         "ok" if refused and not any(l.get("upstream") for l in refused) else "bad", len(refused)))
     errors = [l for l in reads if l["upstream"].get("outcome") == "error"]
     print("%s	no read of Cloud MCP failed (%d)" % ("ok" if not errors else "bad", len(errors)))
+
+
+def header_of(headers, name):
+    """A header by name, any case: a tunnel may lower the names' case."""
+    return next((v for k, v in headers.items() if k.lower() == name.lower()), None)
+
+
+def started_one(kept):
+    """The receiver answers a delivery it started a triage from with 202 and
+    {"triage": "started"}; a 202 with a decision ("ignored") started none."""
+    return kept.get("status") == 202 and kept.get("answer") == {"triage": "started"}
+
+
+def delivery(argv):
+    """The live leg's webhook mode (ADR 9): Cypress Cloud's delivery for the
+    recorded run, among the requests that reached the tunnel (FILE, kept by
+    tests/e2e/tap.py), waited for up to WAIT seconds. The delivery goes to
+    out/delivery.json as scripts/send-run.py writes its own, headers and
+    body, for tests/e2e/webhook.py to replay; the runs the receiver started
+    a triage for go to out/delivered-runs, one per line, for run.sh's count
+    of Jobs. Only a request signed with the webhook's secret starts one."""
+    path, project, run, wait = argv[0], argv[1], int(argv[2]), int(argv[3])
+    deadline, lines, found = time.time() + wait, [], None
+    while True:
+        try:
+            lines = [json.loads(l) for l in open(path, encoding="utf-8") if l.startswith("{")]
+        except OSError:
+            lines = []
+        for d in lines:
+            try:
+                body = json.loads(d["body"])
+            except ValueError:
+                continue
+            if isinstance(body, dict) and body.get("projectId") == project and body.get("runNumber") == run:
+                found = d
+                break
+        if found or time.time() > deadline:
+            break
+        time.sleep(2)
+    started = sorted({json.loads(d["body"])["runNumber"] for d in lines if started_one(d)})
+    with open("out/delivered-runs", "w", encoding="utf-8") as f:
+        f.write("".join("%d\n" % n for n in started))
+    if not found:
+        print("bad\tno delivery from Cypress Cloud for run #%d reached the public URL in %d seconds (%d other requests)"
+              % (run, wait, len(lines)))
+        return
+    h = found["headers"]
+    a = found.get("answer") or {}
+    print("%s\tCypress Cloud's signed delivery for run #%d reached the receiver at the public URL and started "
+          "a triage (HTTP %s, %s, event %s)" % (
+              "ok" if started_one(found) else "bad", run, found["status"],
+              a.get("decision") or a.get("triage") or "no answer", header_of(h, "X-Cypress-Event-Id") or "with no ID"))
+    sent = (header_of(h, "X-Cypress-Event"), header_of(h, "X-Cypress-Event-Version"))
+    print("%s\tthe delivery came as Cypress documents it: X-Cypress-Event %s, version %s, a signature and a "
+          "timestamp" % ("ok" if sent == ("run.completed", "1") and header_of(h, "X-Cypress-Signature")
+                         and header_of(h, "X-Cypress-Timestamp") else "bad", sent[0], sent[1]))
+    with open("out/delivery.json", "w", encoding="utf-8") as f:
+        json.dump({"headers": h, "body": found["body"]}, f)
 
 
 # --- the model leg (ADR 6, tests/e2e/models.sh) ------------------------------
@@ -331,4 +391,5 @@ def model_report(argv):
 
 if __name__ == "__main__":
     {"cypress": cypress, "slack": slack, "doors": doors, "model-triage": model_triage,
-     "model-slack": model_slack, "model-door": model_door, "model-report": model_report, "live": live}[sys.argv[1]](sys.argv[2:])
+     "model-slack": model_slack, "model-door": model_door, "model-report": model_report, "live": live,
+     "delivery": delivery}[sys.argv[1]](sys.argv[2:])

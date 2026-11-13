@@ -32,6 +32,15 @@
 #      the door reaches Cypress on 443 and nothing else, and Cloud MCP
 #      refuses a token that is not the door's
 #
+# With DELIVERY set as well (ADR 9, the live leg's webhook mode), step 3's
+# delivery is Cypress Cloud's own: sent to the tunnel's public URL
+# (WEBHOOK_HOST) when the run was recorded, signed with the webhook's secret,
+# and kept by tests/e2e/tap.py in DELIVERIES. It must have started the
+# triage; sent again at the public URL, as is, with a new event ID, unsigned
+# and altered, it starts nothing. The CI trigger sends nothing. WEBHOOK_URL,
+# when set, is used in place of https://WEBHOOK_HOST/webhook: the tap's own
+# address, to run this mode on kind with no tunnel.
+#
 # Needs kubectl, python3 and Docker. Writes a summary to $GITHUB_STEP_SUMMARY
 # when set.
 # shellcheck disable=SC2015
@@ -155,21 +164,55 @@ pf_ensure() {
 }
 pf_start
 URL="http://127.0.0.1:$PORT/webhook"
+# In the webhook mode, Cypress Cloud's delivery came when the run was
+# recorded, before this script started, and it is found first: the
+# refusals below are then counted against a cluster where its triage has
+# already begun.
+if [ -n "${DELIVERY:-}" ]; then
+  rm -f out/delivery.json out/delivered-runs
+  verdicts < <(python3 tests/e2e/checks.py delivery "${DELIVERIES:?the file tests/e2e/tap.py keeps}" "$PROJECT" "$RUN" 300)
+fi
 before="$(jobs_in_namespace)"
 jobs_before="$(kubectl -n triage-agents get jobs -o name 2>/dev/null)"
 judge < <(secret | python3 tests/e2e/webhook.py before "$URL" out/run-completed.json)
 [ "$(jobs_in_namespace)" = "$before" ] && pass "none of those started a triage" \
   || fail "a refused delivery started a triage: $(kubectl -n triage-agents get jobs -o name)"
 pf_ensure
-answer="$(secret | python3 scripts/send-run.py "$URL" out/run-completed.json out/delivery.json)"
-[[ "$answer" == "HTTP 202"* ]] && pass "the CI trigger's signed delivery started a triage ($answer)" \
-  || fail "the CI trigger's delivery was not accepted: $answer"
+if [ -z "${DELIVERY:-}" ]; then
+  answer="$(secret | python3 scripts/send-run.py "$URL" out/run-completed.json out/delivery.json)"
+  [[ "$answer" == "HTTP 202"* ]] && pass "the CI trigger's signed delivery started a triage ($answer)" \
+    || fail "the CI trigger's delivery was not accepted: $answer"
+elif [ -s out/delivery.json ]; then
+  judge < <(python3 tests/e2e/webhook.py public "${WEBHOOK_URL:-https://${WEBHOOK_HOST:?the hostname of the tunnel}/webhook}" out/delivery.json)
+  [ "$(jobs_in_namespace)" = "$before" ] && pass "none of those started a triage either" \
+    || fail "a delivery refused at the public URL started a triage: $(kubectl -n triage-agents get jobs -o name)"
+fi
 pf_ensure
-judge < <(secret | python3 tests/e2e/webhook.py after "$URL" out/run-completed.json out/delivery.json)
+if [ -s out/delivery.json ]; then
+  judge < <(secret | python3 tests/e2e/webhook.py after "$URL" out/run-completed.json out/delivery.json)
+else
+  fail "no delivery to send again"
+fi
 sleep 2
-# Jobs from earlier runs on the same cluster stay for an hour (ttlSecondsAfterFinished).
-jobs="$(comm -13 <(printf '%s\n' "$jobs_before" | sort) <(kubectl -n triage-agents get jobs -o name | sort) | grep . || true)"
-[ "$jobs" = "job.batch/$JOB" ] && pass "one triage Job for the run, $JOB" || fail "expected one new Job, $JOB; found: ${jobs:-none}"
+if [ -z "${DELIVERY:-}" ]; then
+  # Jobs from earlier runs on the same cluster stay for an hour (ttlSecondsAfterFinished).
+  jobs="$(comm -13 <(printf '%s\n' "$jobs_before" | sort) <(kubectl -n triage-agents get jobs -o name | sort) | grep . || true)"
+  [ "$jobs" = "job.batch/$JOB" ] && pass "one triage Job for the run, $JOB" || fail "expected one new Job, $JOB; found: ${jobs:-none}"
+else
+  # The cluster is the job's own. Cypress Cloud retries a delivery it could
+  # not hand over, so a retry for an earlier run may arrive while the tunnel
+  # is up; the receiver starts its triage too. Every Job must be one the
+  # receiver started for a run Cypress Cloud delivered, and one of them this
+  # run's.
+  jobs="$(kubectl -n triage-agents get jobs -o name 2>/dev/null | sort)"
+  want="$(sed "s#^#job.batch/triage-$PROJECT-#" out/delivered-runs 2>/dev/null | sort)"
+  others="$(grep -vx "job.batch/$JOB" <<<"$want" | grep -c . || true)"
+  also=""
+  [ "${others:-0}" -gt 0 ] && also=", and one for each of $others earlier runs Cypress Cloud delivered again"
+  [ -n "$jobs" ] && [ "$jobs" = "$want" ] && grep -qx "job.batch/$JOB" <<<"$jobs" \
+    && pass "one triage Job for the run, $JOB$also" \
+    || fail "expected one Job for each run Cypress Cloud delivered, $JOB among them; found: ${jobs:-none}"
+fi
 
 # --- 4 -----------------------------------------------------------------------
 step "4. the triage agent, fooled by the failure message"

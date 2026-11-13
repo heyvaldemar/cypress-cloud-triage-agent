@@ -25,7 +25,7 @@ The live job runs daily and on dispatch; the probe runs by hand, with a certific
 
 - The door's forward is written against Cloud MCP's real arguments and answers, and a change on Cypress's side shows up as a red probe, not as a door that quietly reads the wrong run.
 - A public log of the live leg shows no project, no run URL and no answer. Reading the answers needs the private key of the certificate the run was dispatched with.
-- The live Cloud MCP is claimed with the run that proves it. The live webhook is not: it needs a public HTTPS receiver, which this leg does not add.
+- The live Cloud MCP is claimed with the run that proves it. The live webhook is not: it needs a public HTTPS receiver, which ADR 9 adds to this job as its webhook mode.
 - The door's egress is the addresses `mcp.cypress.io` had when the stack came up. They are Cloudflare's; if they move during a run, the door's reads fail and the run is red, which is the right way for it to fail.
 - The record key and the token are personal to the maintainer's account, and the token reaches every project that account can see. Only main can use them, and only this workflow names them.
 

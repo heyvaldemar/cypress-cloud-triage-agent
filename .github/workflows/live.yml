@@ -13,6 +13,14 @@ name: Live Cloud MCP
 # environment cypress-cloud, which only main may use, so GitHub masks the
 # project and every run URL in the logs. The summary and the kept logs have
 # the project taken out; the probe's answers leave the job only encrypted.
+#
+# The webhook mode (ADR 9): when the environment also holds the tunnel's
+# token, its hostname and the webhook's signing secret, the stack comes up
+# first, the receiver takes the webhook's secret and answers at the tunnel's
+# public URL for as long as the job runs, and only then is the spec
+# recorded. Cypress Cloud's own delivery of run.completed starts the triage;
+# the CI trigger sends nothing. With none of the three, the job runs as
+# before; with some but not all, it fails.
 on:
   schedule:
     - cron: "17 6 * * *"
@@ -46,11 +54,22 @@ jobs:
       - name: Install the pinned tools
         run: ./scripts/install-tools.sh >> "$GITHUB_PATH"
 
-      - name: Record the spec to Cypress Cloud
+      - name: Is the webhook set up
+        id: webhook
         env:
-          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
-          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
-        run: ./scripts/live.sh record
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          WEBHOOK_HOST: ${{ secrets.WEBHOOK_HOST }}
+          WEBHOOK_SECRET: ${{ secrets.CYPRESS_WEBHOOK_SECRET }}
+        run: |
+          n=0
+          for v in "$TUNNEL_TOKEN" "$WEBHOOK_HOST" "$WEBHOOK_SECRET"; do
+            if [ -n "$v" ]; then n=$((n + 1)); fi
+          done
+          case "$n" in
+            0) echo "on=" >>"$GITHUB_OUTPUT"; echo "no webhook: the CI trigger starts the triage" ;;
+            3) echo "on=1" >>"$GITHUB_OUTPUT"; echo "the webhook mode: Cypress Cloud's delivery starts the triage" ;;
+            *) echo "::error::CLOUDFLARE_TUNNEL_TOKEN, WEBHOOK_HOST and CYPRESS_WEBHOOK_SECRET are set together or not at all ($n of 3 are)"; exit 1 ;;
+          esac
 
       - name: Create the kind cluster
         run: kind create cluster --config kind/cluster.yaml --wait 120s
@@ -58,33 +77,59 @@ jobs:
       - name: Apply the triage stack
         run: ./scripts/install.sh
 
+      - name: Give the receiver the webhook's signing secret
+        if: steps.webhook.outputs.on == '1'
+        env:
+          WEBHOOK_SECRET: ${{ secrets.CYPRESS_WEBHOOK_SECRET }}
+        run: ./scripts/live.sh signing <<<"$WEBHOOK_SECRET"
+
       - name: Point the door at Cloud MCP
         env:
           CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
           TOKEN: ${{ secrets.CYPRESS_MCP_TOKEN }}
         run: ./scripts/live.sh up <<<"$TOKEN"
 
+      - name: Open the receiver at the tunnel's public URL
+        if: steps.webhook.outputs.on == '1'
+        env:
+          WEBHOOK_HOST: ${{ secrets.WEBHOOK_HOST }}
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+        run: ./scripts/live.sh tunnel <<<"$TUNNEL_TOKEN"
+
+      - name: Record the spec to Cypress Cloud
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+        run: ./scripts/live.sh record
+
       - name: Run every check against the live door
         env:
           LIVE: "1"
+          DELIVERY: ${{ steps.webhook.outputs.on }}
+          DELIVERIES: ${{ runner.temp }}/tunnel/deliveries.jsonl
+          WEBHOOK_HOST: ${{ secrets.WEBHOOK_HOST }}
           CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
           E2E_RESULTS: ${{ runner.temp }}/e2e-results-unredacted.json
         run: ./tests/e2e/run.sh
 
-      # What each door and the agent wrote, with the project taken out. The
-      # tokens and secrets are never in these files.
+      # What each door and the agent wrote, with the project and the tunnel's
+      # hostname taken out. The tokens and secrets are never in these files,
+      # and neither is what the tunnel kept ($RUNNER_TEMP/tunnel).
       - name: Take the project out of the logs and the results
         if: always()
         env:
           CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          WEBHOOK_HOST: ${{ secrets.WEBHOOK_HOST }}
         run: |
           mkdir -p "$RUNNER_TEMP/live-logs" "$RUNNER_TEMP/live-results"
+          hide="s/$CYPRESS_PROJECT_ID/<project>/g"
+          [ -n "$WEBHOOK_HOST" ] && hide="$hide;s/$(printf '%s' "$WEBHOOK_HOST" | sed 's/[.]/[.]/g')/<host>/g"
           for f in agent receiver cloud-mcp notifier slack; do
-            [ -f "out/$f.log" ] && sed "s/$CYPRESS_PROJECT_ID/<project>/g" "out/$f.log" >"$RUNNER_TEMP/live-logs/$f.log"
+            [ -f "out/$f.log" ] && sed "$hide" "out/$f.log" >"$RUNNER_TEMP/live-logs/$f.log"
           done
           raw="$RUNNER_TEMP/e2e-results-unredacted.json"
-          [ -f "$raw" ] && sed "s/$CYPRESS_PROJECT_ID/<project>/g" "$raw" >"$RUNNER_TEMP/live-results/e2e-results.json"
-          rm -f "$raw"
+          [ -f "$raw" ] && sed "$hide" "$raw" >"$RUNNER_TEMP/live-results/e2e-results.json"
+          rm -f "$raw" out/delivery.json
           true
 
       # The checks, for the status workflow (status-live.json).
