@@ -37,6 +37,17 @@ The first live run with the webhook, [43513818839](https://github.com/heyvaldema
 - When a delivery is not sent, or arrives more than 300 seconds after the run, the run is red. That is the failure a claim about a live webhook has to be able to show.
 - The live webhook is claimed with the run that shows it, citing the run, and not before.
 
+## Where the pieces live, and how to take them down
+
+Outside this repository there are four pieces, all in the maintainer's own accounts. The hostname is in the `WEBHOOK_HOST` secret and nowhere here.
+
+- **The tunnel**, `cypress-triage-webhook`, in Cloudflare under Networking, Tunnels. It has one route, a published application from the hostname to `http://127.0.0.1:18091`, the tap's port on the runner. Cloudflare made the hostname's DNS record when the route was added.
+- **A Page Rule** on the hostname's zone: the hostname with `/*`, Cache Level Bypass, placed first. The zone's own forwarding rule (`*zone/*`) comes after it.
+- **The webhook**, in the Cypress Cloud project's settings, General, Webhooks: the hostname's `/webhook`, with run.completed as its only event.
+- **Three secrets** of the `cypress-cloud` environment: `CLOUDFLARE_TUNNEL_TOKEN`, `WEBHOOK_HOST` and `CYPRESS_WEBHOOK_SECRET`.
+
+To take the webhook mode down, delete the webhook in Cypress Cloud first, so nothing is sent to a hostname that is going away. Then delete the three secrets: the live job then runs as ADR 8 has it. Deleting the tunnel in Cloudflare removes its route. If the DNS record is left, delete it in the zone's DNS records, and delete the Page Rule. The tunnel's token is revoked with the tunnel. The `cert.pem` that `cloudflared tunnel login` wrote to read that token was deleted the same day.
+
 ## Alternatives
 
 - **A quick tunnel.** It needs no account, but its hostname changes every run, and the webhook's URL is set in Cypress Cloud by hand.
