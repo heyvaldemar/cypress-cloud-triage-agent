@@ -1,6 +1,6 @@
 # 9. A live delivery: Cypress Cloud's own run.completed, through a tunnel open only while the job runs
 
-- Status: proposed (accepted with the first live run whose triage Cypress Cloud's delivery started)
+- Status: accepted (first live delivery [43513818839](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/runs/43513818839), 2026-11-13)
 - Date: 2026-11-13
 
 ## Context
@@ -25,6 +25,8 @@ A named Cloudflare tunnel, on a zone of the maintainer's that serves nothing els
 4. **The Jobs.** Every Job in the cluster must be one the receiver started for a run Cypress Cloud delivered, and one of them must be the recorded run's. A run recorded while no tunnel was up, such as a probe's, gets its delivery retried. A retry can arrive during a later run, and the receiver starts its triage too.
 
 `tests/unit/test_delivery.py` holds the tap and the delivery check to this, with three plants. On kind, with `scripts/send-run.py` standing in for Cypress Cloud and sending through the tap, the webhook mode ran whole, and a stand-in that sent the delivery unsigned failed it.
+
+The first live run with the webhook, [43513818839](https://github.com/heyvaldemar/cypress-cloud-triage-agent/actions/runs/43513818839) on main, passed all 110 checks. Cypress Cloud's delivery for the recorded run arrived as documented: `run.completed`, version 1, signed over its timestamp and body. Its body passed the receiver's checks as they stand, written from the docs, and it started the triage. The four copies sent again at the public URL were refused, and the triage read the run through the real Cloud MCP like the CI trigger's did.
 
 ## Consequences
 
