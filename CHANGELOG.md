@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-13
+
 ### Added
 
 - The live job's webhook mode (ADR 9, accepted with live run 43513818839, the first triage Cypress Cloud's own delivery started: 110 checks, none failed). With the tunnel's token, its hostname and the webhook's signing secret set in the `cypress-cloud` environment (`CLOUDFLARE_TUNNEL_TOKEN`, `WEBHOOK_HOST`, `CYPRESS_WEBHOOK_SECRET`), the stack comes up before the spec is recorded, the receiver takes the webhook's secret (`scripts/live.sh signing`), and a named Cloudflare tunnel opens it at a public HTTPS URL for as long as the job runs (`scripts/live.sh tunnel`, with cloudflared pinned in `tunnel.lock` and its token read from a file, never a command line). Cypress Cloud's own delivery starts the triage, and the CI trigger sends nothing. `tests/e2e/run.sh` with `DELIVERY` set checks that the delivery for the recorded run started a triage and came as Cypress documents it, then sends it again at the public URL: as is and with a new event ID, 409; unsigned and with a byte added, 401; none starts a Job. Every Job must be one for a run Cypress Cloud delivered. With none of the three secrets set, the job runs as before; with some, it fails.
@@ -80,7 +82,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
-[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.0...v1.1.1
