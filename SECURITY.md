@@ -10,7 +10,7 @@
 
 ## Reporting a vulnerability
 
-Report privately through GitHub: **Security → Report a vulnerability** on this repository. Email to v@valdemar.ai also works. The process is described at [heyvaldemar.com/security](https://heyvaldemar.com/security/).
+Report privately through GitHub: [**Security → Report a vulnerability**](https://github.com/heyvaldemar/cypress-cloud-triage-agent/security/advisories/new) on this repository. Email to connect@valdemar.ai also works. The process is described at [heyvaldemar.com/security](https://heyvaldemar.com/security/).
 
 You can expect an acknowledgment within 7 days. There is no bounty program; valid, responsibly disclosed reports are credited in the changelog. Please do not open public issues for security reports.
 
