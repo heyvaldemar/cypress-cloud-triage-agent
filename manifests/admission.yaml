@@ -62,7 +62,7 @@ spec:
     # scripts/validate.sh checks they are the ones receiver/job.json names.
     - expression: >-
         variables.podSpec.containers.all(c, c.image ==
-        'docker.io/library/python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca') &&
+        'docker.io/library/python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e') &&
         variables.inits.all(c, c.image ==
         'docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec')
       message: a triage pod runs the pinned agent image, and the pinned gate image before it
