@@ -784,9 +784,14 @@ def check_providers():
 
 
 def check_terraform_lock():
-    for lock in CONFIG["terraform_locks"]:
+    locks = CONFIG["terraform_locks"]
+    for lock in locks:
         for source, pinned in re.findall(r'provider "registry\.terraform\.io/([^"]+)" \{\s*version\s*=\s*"([^"]+)"', read(lock)):
-            against_registry("provider %s" % source, source, pinned, "locked")
+            # With more than one lock file the same provider is locked in
+            # each (the flagship's gke/ and gke/bootstrap/), so the line
+            # names its file, as a charts.lock line does.
+            what = "provider %s" % source if len(locks) == 1 else "provider %s (%s)" % (source, lock)
+            against_registry(what, source, pinned, "locked")
 
 
 def minor_key(v):
@@ -967,10 +972,14 @@ def selftest():
                             lambda: [digest_of("public.ecr.aws/docker/library/b:2"), None],
                             lambda: digest_of("quay.io/c/d:3") == "sha256:" + "a" * 64 or behind("control", "an answering registry was not read")))
     text = out.getvalue()
+    # What the simulated run printed is shown indented, never as it was: a
+    # line that starts with ::error:: is a workflow command, and the two this
+    # part provokes on purpose would mark a passing selftest's run with errors.
+    shown = "".join("  | %s\n" % line for line in text.splitlines())
     throttle_ok = (code == 1 and calls.count("public.ecr.aws/eks/a:1") == 3 and "public.ecr.aws/docker/library/b:2" not in calls
                    and "quay.io/c/d:3" in calls and len(not_checked) == 2 and not problems
                    and "could not check: ECR Public throttled" in text and "0 pin(s) behind upstream" not in text)
-    print(text, end="")
+    print(shown, end="")
     print("selftest: %s (exit %d, %d tries on the throttled host, %d not checked, %d behind)"
           % ("ok" if throttle_ok else "FAILED", code, len([c for c in calls if c.startswith("public.ecr.aws/")]),
              len(not_checked), len(problems)))
