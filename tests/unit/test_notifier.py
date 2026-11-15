@@ -7,6 +7,7 @@ Each defused form sits next to its control: Cypress's own link survives.
 """
 import importlib.util
 import os
+import re
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,8 +20,11 @@ COLLECTOR = "http://collector.outside.svc.cluster.local:8080/c?run=1003"
 
 
 def live_links(text):
-    """Every address Slack would make into a link or fetch a preview of."""
-    return notifier.URL.findall(text)
+    """Every address Slack would make into a link or fetch a preview of: one
+    for each scheme in the text, wherever it starts, so an address inside
+    another one, or glued to a word, is counted on its own. Not the
+    notifier's own pattern, so a change there cannot hide one here."""
+    return re.findall(r"(?i)(?=((?:https?|ftp)://[^\s<>\"'|`]+))", text)
 
 
 class DefuseTest(unittest.TestCase):
@@ -58,6 +62,29 @@ class DefuseTest(unittest.TestCase):
             out = notifier.defuse(url)
             self.assertEqual(live_links(out), [], url)
             self.assertNotIn("example.net", out, url)
+
+    def test_an_address_inside_another_is_broken_too(self):
+        # A link whose text is an address, and two addresses joined by a comma:
+        # one match each, and the second scheme in it is broken as well.
+        inner = COLLECTOR.replace("http://", "https://")
+        for text in ("[%s](%s)." % (inner, COLLECTOR), "%s,%s" % (COLLECTOR, inner)):
+            out = notifier.defuse(text)
+            self.assertEqual(live_links(out), [], text)
+            self.assertIn("hxxps://collector[.]outside", out, text)
+            self.assertIn("hxxp://collector[.]outside", out, text)
+
+    def test_a_cypress_link_cannot_carry_another_address(self):
+        for text in ("https://cloud.cypress.io/projects/kind01/runs/7,http://example.net/x",
+                     "[https://cloud.cypress.io/projects/kind01/runs/7](http://example.net/x)",
+                     "https://cloud.cypress.io/projects/kind01/runs/7?next=https://example.net/x"):
+            out = notifier.defuse(text)
+            self.assertEqual(live_links(out), [], text)
+            self.assertNotIn("example.net", out, text)
+
+    def test_an_address_glued_to_a_word_is_broken(self):
+        out = notifier.defuse("see:" + "x" + COLLECTOR)
+        self.assertEqual(live_links(out), [])
+        self.assertIn("xhxxp://collector[.]outside", out)
 
     def test_ampersand_cannot_build_an_entity(self):
         self.assertEqual(notifier.defuse("&lt;!channel&gt;"), "&amp;lt;!channel&amp;gt;")

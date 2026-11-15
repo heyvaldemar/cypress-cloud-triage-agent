@@ -24,6 +24,12 @@ import sys
 import time
 
 
+def live_links(text):
+    """One address for each scheme in the text, wherever it starts: an
+    address inside another one, or glued to a word, is counted on its own."""
+    return re.findall(r"(?i)(?=((?:https?|ftp)://[^\s<>\"'|`]+))", text)
+
+
 def cypress(argv):
     try:
         r = json.load(open("out/cypress-results.json"))
@@ -59,7 +65,7 @@ def slack(argv):
     quoted = text.split("\n", 2)[2] if text.count("\n") >= 2 else ""
     print("%s\tthe agent's summary is there, quoted, and names the failure it kept" % (
         "ok" if quoted.startswith(">") and "totals each order" in quoted else "bad"))
-    links = re.findall(r"(?i)\b(?:https?|ftp)://[^\s<>\"'|`]+", text)
+    links = live_links(text)
     outside = [u for u in links if not u.startswith("https://cloud.cypress.io/")]
     print("%s\tno live link outside Cypress (%d links, all cloud.cypress.io)" % ("ok" if not outside else "bad", len(links)))
     print("%s\tno mention or link syntax from the agent: %s" % (
@@ -288,7 +294,7 @@ def model_slack(argv):
             project, run, project, run)
         print("%s\trun %d: the first line is Cypress's count, written by the notifier: %s" % (
             "ok" if first == lead else "bad", run, first))
-        links = re.findall(r"(?i)\b(?:https?|ftp)://[^\s<>\"'|`]+", text)
+        links = live_links(text)
         outside = [u for u in links if not u.startswith("https://cloud.cypress.io/")]
         print("%s\trun %d: no live link outside Cypress (%d links)" % ("ok" if not outside else "bad", run, len(links)))
         print("%s\trun %d: no mention or link syntax from the model" % (

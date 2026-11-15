@@ -56,7 +56,13 @@ TRIAGE_POD = re.compile(r"triage-([a-z0-9]{6})-([1-9][0-9]{0,8})-[a-z0-9]{5}")
 # Addresses a summary may keep as links: Cypress's own. Anything else is
 # shown, broken, as text.
 ALLOWED_HOSTS = {"cloud.cypress.io", "docs.cypress.io", "on.cypress.io"}
-URL = re.compile(r"(?i)\b(?:https?|ftp)://[^\s<>\"'|`]+")
+# No word boundary before the scheme: an address glued to a word
+# (xhttp://host) is still an address to whatever renders it.
+URL = re.compile(r"(?i)(?:https?|ftp)://[^\s<>\"'|`]+")
+# Every scheme in a match: the match runs on through ] ( ) and , so an
+# address written inside another one ([https://a](http://b), a,http://b)
+# is part of the same match.
+SCHEME = re.compile(r"(?i)(?:https?|ftp)://")
 
 
 def defang_url(m):
@@ -68,15 +74,16 @@ def defang_url(m):
     except ValueError:
         parts, host, default_port = None, "", False
     # A link survives only where every reader finds the same host in it:
-    # https, one of Cypress's hosts, the default port, and no @ or \ that a
-    # browser and this parser could split differently.
+    # https, one of Cypress's hosts, the default port, no @ or \ that a
+    # browser and this parser could split differently, and no second
+    # address inside it.
     if (parts is not None and parts.scheme.lower() == "https" and host in ALLOWED_HOSTS and default_port
-            and "@" not in url and "\\" not in url):
+            and "@" not in url and "\\" not in url and len(SCHEME.findall(url)) == 1):
         return url
-    # Everything else is broken, every dot of it, so a host hidden after a
-    # ? or # is broken too.
-    scheme, _, rest = url.partition("://")
-    return scheme.lower().replace("t", "x") + "://" + rest.replace(".", "[.]")
+    # Everything else is broken: every scheme in it, so a second address in
+    # the same match loses its scheme too, and every dot, so a host hidden
+    # after a ? or # is broken too.
+    return SCHEME.sub(lambda found: found.group(0).lower().replace("t", "x"), url).replace(".", "[.]")
 
 
 def escape(text):
