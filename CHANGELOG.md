@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-15
+
 ### Added
 
 - `scripts/status.py` counts the live job's webhook mode (ADR 9) apart in `status-live.json`: `webhook_runs` and `webhook_runs_passed` for the runs whose tunnel step ran, and `webhook_scheduled_streak` with `webhook_scheduled_in_a_row`, the scheduled runs in a row back from the latest scheduled one that passed with the tunnel open. A scheduled run that failed or skipped the tunnel stops it. Each run in `recent` says whether it opened the tunnel. Cypress Cloud's delivery is called daily only when that streak is two or more, and anyone can now read it there instead of waiting for someone to look. `tests/unit/test_status.py` and two planted violations, forty-six in all.
@@ -95,7 +97,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - The notifier read a link's host as the text after the last `@` before the first `/`, so `https://example.net?x=@cloud.cypress.io/` and `https://example.net\@cloud.cypress.io/` passed as Cypress links while a browser opens `example.net`. Found by an automated review of the first commit; the new test failed on that code. The host now comes from `urllib.parse.urlsplit`, a link with `@`, `\` or a port other than 443 is broken, and a broken link has every dot broken, so a host after `?` or `#` is too.
 - The first e2e run summarised 62 of its 91 checks: four steps fed their verdicts through a pipe, where a failure would not reach the exit status. Fixed before the first commit, and shown red by a deliberately broken check.
 
-[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/heyvaldemar/cypress-cloud-triage-agent/compare/v1.1.1...v1.1.2
