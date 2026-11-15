@@ -42,7 +42,7 @@ Everything is pinned:
 - The models: `models/models.lock` holds the flagship's lines (kubernetes-air-gapped-ai-agent, `models/models.lock`) for the three models the model leg runs, each by the file's sha256 at a fixed revision and by its image's digest. They move when the flagship's do, and `scripts/models.sh build` fails if the image it builds is not the pinned digest. llama-server is the flagship's pin too.
 - Actions: by commit SHA, bumped weekly by Dependabot in one group and merged by `dependabot-automerge.yml` only after the e2e and Verify pass. The SLSA generator in `release-assets.yml` is the exception: it refuses a SHA, so it is referenced by tag.
 
-Dependabot reads only the actions. Everything else is moved by hand, with the new hash checked against the publisher's, and not before a release is three days old. `scripts/check-freshness.py` reports each pin upstream has moved past and changes nothing.
+Dependabot reads only the actions. Everything else is moved by hand, with the new hash checked against the publisher's, and not before a release is three days old. `scripts/check-freshness.py`, the fleet's one copy of the check (fleet-ops `templates/check-freshness.py`, with what this repository pins listed in `freshness.json`), reports each pin upstream has moved past and changes nothing. A release younger than three days is a warning that names when it becomes a failure; one three days old or older, a release of unknown age, or a tag that now points at another digest fails.
 
 ## Numbers
 

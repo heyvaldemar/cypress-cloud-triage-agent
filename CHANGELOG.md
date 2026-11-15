@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - `scripts/status.py` counts the live job's webhook mode (ADR 9) apart in `status-live.json`: `webhook_runs` and `webhook_runs_passed` for the runs whose tunnel step ran, and `webhook_scheduled_streak` with `webhook_scheduled_in_a_row`, the scheduled runs in a row back from the latest scheduled one that passed with the tunnel open. A scheduled run that failed or skipped the tunnel stops it. Each run in `recent` says whether it opened the tunnel. Cypress Cloud's delivery is called daily only when that streak is two or more, and anyone can now read it there instead of waiting for someone to look. `tests/unit/test_status.py` and two planted violations, forty-six in all.
 
+### Changed
+
+- `scripts/check-freshness.py` is the fleet's one copy of the freshness check, fleet-ops `templates/check-freshness.py`, and what this repository pins is listed in `freshness.json`. A release younger than three days is now a warning that names the moment it becomes a failure: the release-age rule keeps such a version off main anyway, and every upstream release used to turn the check red for three days nobody was allowed to act on. A release whose date cannot be read still fails, and so does a tag that moved to a new digest.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added
