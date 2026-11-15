@@ -52,9 +52,9 @@ The checks, each listed by name in freshness.json's "checks":
   appset_charts   the charts the ApplicationSets in "appsets" install, against
                   a Helm index or, for an OCI chart, its project's releases
   images          every image pinned as name:tag@sha256, inline or split into
-                  registry/repository/tag in values, against what the tag
-                  resolves to now: a moved tag is a rebuilt image nobody here
-                  has run. A pin on one platform's manifest is current while
+                  registry, repository (or repo) and tag in values, against
+                  what the tag resolves to now: a moved tag is a rebuilt image
+                  nobody here has run. A pin on one platform's manifest is current while
                   that manifest is still in the index the tag points to
   chart_images    each chart rendered with and without the repository's image
                   pins ("render"), so a chart bump that moves an image's
@@ -574,13 +574,15 @@ def compare(what, ref):
 
 
 def values_refs(text):
-    """name:tag@sha256 for values that split an image into registry, repository and tag."""
+    """name:tag@sha256 for values that split an image into registry, repository
+    (or repo, as Coder's chart calls it) and tag."""
     refs, seen = [], {}
     for line in text.splitlines():
-        m = re.match(r"^(\s*)(registry|repository|tag):\s*['\"]?([^'\"\s#]+)", line)
+        m = re.match(r"^(\s*)(registry|repository|repo|tag):\s*['\"]?([^'\"\s#]+)", line)
         if not m:
             continue
         indent, key, value = len(m.group(1)), m.group(2), m.group(3)
+        key = "repository" if key == "repo" else key
         seen = {k: v for k, v in seen.items() if v[0] == indent}
         seen[key] = (indent, value)
         if key == "tag" and "@sha256:" in value and "repository" in seen:
@@ -596,7 +598,7 @@ def yaml_refs(text):
 
     def walk(n):
         if isinstance(n, dict):
-            repo, tag = n.get("repository"), str(n.get("tag", ""))
+            repo, tag = n.get("repository") or n.get("repo"), str(n.get("tag", ""))
             digest = n.get("digest") or (("sha256:" + n["sha"]) if n.get("sha") and not str(n["sha"]).startswith("sha256:")
                                          else n.get("sha"))
             reg = n.get("registry")
