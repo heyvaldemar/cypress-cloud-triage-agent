@@ -6,7 +6,9 @@
 The live workflow has two jobs, and only one of them triages a run: a run
 dispatched with a certificate runs the probe alone and must not count. The
 scheduled streak is what "daily" is said on, so it must stop at the first
-scheduled run that failed.
+scheduled run that failed. The webhook mode's streak (ADR 9) is what "daily"
+is said of Cypress Cloud's delivery on, so it must also stop at a scheduled
+run that did not open the tunnel.
 """
 import datetime
 import importlib.util
@@ -34,8 +36,9 @@ def run(n, day, event):
 class GitHub:
     """Runs of live.yml as the API lists them, each with its two jobs."""
 
-    def __init__(self, jobs):
+    def __init__(self, jobs, tunnel=None):
         self.jobs = jobs  # run id -> {job name: conclusion}
+        self.tunnel = tunnel or {}  # run id -> the tunnel step's conclusion in the live job
         part = {"checks": [{"state": "PASS", "name": "a"}, {"state": "PASS", "name": "b"},
                            {"state": "FAIL", "name": "c"}], "measured": ["stand-in agent: 26 of 26"]}
         buf = io.BytesIO()
@@ -48,13 +51,16 @@ class GitHub:
             return self.zip
         if url.endswith("/jobs"):
             n = int(url.split("/runs/")[1].split("/")[0])
-            return {"jobs": [{"name": name, "conclusion": c} for name, c in self.jobs[n].items()]}
+            steps = [{"name": "Checkout", "conclusion": "success"},
+                     {"name": status.TUNNEL_STEP, "conclusion": self.tunnel.get(n, "skipped")}]
+            return {"jobs": [dict({"name": name, "conclusion": c}, **({"steps": steps} if name == status.LIVE_JOB else {}))
+                             for name, c in self.jobs[n].items()]}
         return {"artifacts": [{"name": "e2e-results", "expired": False, "archive_download_url": "zip"}]}
 
 
 class LiveStatusTest(unittest.TestCase):
-    def live(self, listed, jobs):
-        gh = GitHub(jobs)
+    def live(self, listed, jobs, tunnel=None):
+        gh = GitHub(jobs, tunnel)
         status.get = gh.get
         status.runs = lambda repo, workflow, since: listed
         return status.live_status("o/r", "live.yml", NOW)
@@ -79,6 +85,31 @@ class LiveStatusTest(unittest.TestCase):
         s = self.live(listed, jobs)
         self.assertEqual(s["scheduled_streak"], 2)
         self.assertEqual((s["scheduled_runs"], s["scheduled_passed"]), (4, 3))
+
+    def test_the_webhook_streak_counts_scheduled_runs_that_opened_the_tunnel(self):
+        listed = [run(1, 11, "schedule"), run(2, 12, "workflow_dispatch"), run(3, 13, "schedule"),
+                  run(4, 14, "schedule")]
+        jobs = {n: {status.LIVE_JOB: "success", PROBE: "skipped"} for n in (1, 2, 3, 4)}
+        s = self.live(listed, jobs, tunnel={2: "success", 3: "success", 4: "success"})
+        self.assertEqual(s["scheduled_streak"], 3)
+        self.assertEqual((s["webhook_runs"], s["webhook_runs_passed"]), (3, 3))
+        self.assertEqual(s["webhook_scheduled_streak"], 2)
+        self.assertEqual([r["id"] for r in s["webhook_scheduled_in_a_row"]], [4, 3])
+        self.assertEqual([r["webhook"] for r in s["recent"]], [True, True, True, False])
+
+    def test_the_webhook_streak_stops_at_a_run_without_the_tunnel(self):
+        listed = [run(1, 12, "schedule"), run(2, 13, "schedule"), run(3, 14, "schedule")]
+        jobs = {n: {status.LIVE_JOB: "success"} for n in (1, 2, 3)}
+        s = self.live(listed, jobs, tunnel={1: "success", 2: "success"})
+        self.assertEqual((s["scheduled_streak"], s["webhook_scheduled_streak"]), (3, 0))
+        self.assertEqual(s["webhook_scheduled_in_a_row"], [])
+
+    def test_the_webhook_streak_stops_at_a_red_one(self):
+        listed = [run(1, 12, "schedule"), run(2, 13, "schedule"), run(3, 14, "schedule")]
+        jobs = {1: {status.LIVE_JOB: "success"}, 2: {status.LIVE_JOB: "failure"}, 3: {status.LIVE_JOB: "success"}}
+        s = self.live(listed, jobs, tunnel={1: "success", 2: "failure", 3: "success"})
+        self.assertEqual(s["webhook_scheduled_streak"], 1)
+        self.assertEqual((s["webhook_runs"], s["webhook_runs_passed"]), (3, 2))
 
     def test_the_latest_run_s_checks_and_its_place(self):
         s = self.live([run(7, 12, "schedule")], {7: {status.LIVE_JOB: "success"}})

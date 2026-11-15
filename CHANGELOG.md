@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/status.py` counts the live job's webhook mode (ADR 9) apart in `status-live.json`: `webhook_runs` and `webhook_runs_passed` for the runs whose tunnel step ran, and `webhook_scheduled_streak` with `webhook_scheduled_in_a_row`, the scheduled runs in a row back from the latest scheduled one that passed with the tunnel open. A scheduled run that failed or skipped the tunnel stops it. Each run in `recent` says whether it opened the tunnel. Cypress Cloud's delivery is called daily only when that streak is two or more, and anyone can now read it there instead of waiting for someone to look. `tests/unit/test_status.py` and two planted violations, forty-six in all.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added

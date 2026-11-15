@@ -43,3 +43,5 @@
 "tests/e2e/tap.py"	"DROP = {\"host\", \"connection\","	"DROP = {\"host\", \"x-cypress-signature\", \"connection\","	"delivery"	"a tap at the tunnel's end that drops the signature on its way to the receiver"
 "tests/e2e/tap.py"	"os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)"	"os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)"	"delivery"	"a tap that keeps a real delivery where any user on the runner reads it"
 "tests/e2e/checks.py"	"return kept.get(\"status\") == 202 and kept.get(\"answer\") == {\"triage\": \"started\"}"	"return kept.get(\"status\") == 202"	"delivery"	"a delivery check that takes any 202 as a triage started, an ignored body among them"
+"scripts/status.py"	"s.get(\"conclusion\") in (\"success\", \"failure\")"	"s.get(\"conclusion\") is not None"	"status"	"a status writer that counts a run whose tunnel step was skipped as a webhook run"
+"scripts/status.py"	"if r[\"conclusion\"] != \"success\" or not r[\"webhook\"]:"	"if r[\"conclusion\"] != \"success\":"	"status"	"a webhook streak that runs on through a scheduled run that never opened the tunnel"

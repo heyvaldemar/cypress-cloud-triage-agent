@@ -20,7 +20,10 @@ when E2E_RESULTS is set). Writes:
     status-live.json        with LIVE_WORKFLOW set (live.yml, ADR 8): the same
                             window for the runs whose live job ran, the
                             streak of scheduled ones, and the latest run's
-                            checks; a run that ran only the probe is not one
+                            checks; a run that ran only the probe is not one.
+                            The runs that opened the tunnel (ADR 9) are
+                            counted again apart, with their own streak of
+                            scheduled ones
 
 A day counts as green when its last finished run passed; the run count beside
 it shows the failures that rule hides. The streak counts green days back from
@@ -42,6 +45,10 @@ WINDOW_DAYS = 30
 # The live workflow's job that triages a recorded run; its other job, the
 # probe, triages nothing.
 LIVE_JOB = "A recorded run, triaged through the real Cloud MCP"
+# The live job's step that opens the receiver at the tunnel's public URL
+# (ADR 9). It runs only in the webhook mode, where Cypress Cloud's own
+# delivery starts the triage; without the mode's secrets it is skipped.
+TUNNEL_STEP = "Open the receiver at the tunnel's public URL"
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -175,7 +182,12 @@ def live_status(repo, workflow, now):
     ran, by that job's conclusion. A run dispatched with a certificate runs
     the probe only and is left out. scheduled_streak is the scheduled runs
     that passed, in a row, back from the latest scheduled one: "daily" is
-    said of the live leg when it is two or more."""
+    said of the live leg when it is two or more. webhook_scheduled_streak is
+    the same count for the webhook mode (ADR 9): it stops at the first
+    scheduled run that failed or did not open the tunnel, and "daily" is said
+    of Cypress Cloud's delivery when it is two or more. A run that failed
+    before the tunnel opened is not counted as a webhook run, and it still
+    stops the streak."""
     since = (now - datetime.timedelta(days=WINDOW_DAYS - 1)).date()
     finished = []
     for r in runs(repo, workflow, since):
@@ -184,7 +196,9 @@ def live_status(repo, workflow, now):
         job = next((j for j in get(f"/repos/{repo}/actions/runs/{r['id']}/jobs")["jobs"] if j["name"] == LIVE_JOB),
                    None)
         if job and job.get("conclusion") in ("success", "failure"):
-            finished.append(dict(r, conclusion=job["conclusion"]))
+            webhook = any(s.get("name") == TUNNEL_STEP and s.get("conclusion") in ("success", "failure")
+                          for s in job.get("steps") or [])
+            finished.append(dict(r, conclusion=job["conclusion"], webhook=webhook))
     finished.sort(key=lambda r: r["created_at"])
     days, green, streak = days_of(finished)
     scheduled = [r for r in finished if r["event"] == "schedule"]
@@ -193,13 +207,19 @@ def live_status(repo, workflow, now):
         if r["conclusion"] != "success":
             break
         in_a_row += 1
+    webhook_runs = [r for r in finished if r["webhook"]]
+    webhook_in_a_row = []
+    for r in reversed(scheduled):
+        if r["conclusion"] != "success" or not r["webhook"]:
+            break
+        webhook_in_a_row.append(r)
     latest = finished[-1] if finished else None
     res = results(repo, latest["id"]) if latest else None
     checks = res["checks"] if res else []
 
     def ref(r):
         return {"id": r["id"], "at": r["created_at"], "event": r["event"], "conclusion": r["conclusion"],
-                "url": r["html_url"], "commit": r["head_sha"][:7]}
+                "url": r["html_url"], "commit": r["head_sha"][:7], "webhook": r["webhook"]}
 
     return {
         "repository": repo, "workflow": workflow, "job": LIVE_JOB,
@@ -208,6 +228,10 @@ def live_status(repo, workflow, now):
         "runs": len(finished), "runs_passed": sum(1 for r in finished if r["conclusion"] == "success"),
         "scheduled_runs": len(scheduled), "scheduled_passed": sum(1 for r in scheduled if r["conclusion"] == "success"),
         "scheduled_streak": in_a_row,
+        "webhook_runs": len(webhook_runs),
+        "webhook_runs_passed": sum(1 for r in webhook_runs if r["conclusion"] == "success"),
+        "webhook_scheduled_streak": len(webhook_in_a_row),
+        "webhook_scheduled_in_a_row": [ref(r) for r in webhook_in_a_row],
         "latest": None if not latest else dict(ref(latest), **{
             "checks_passed": sum(1 for c in checks if c.get("state") == "PASS"),
             "checks_failed": sum(1 for c in checks if c.get("state") == "FAIL"),
