@@ -1,0 +1,4 @@
+{
+  "checks": ["charts", "charts_lock", "images", "tools", "ci_images"],
+  "tool_locks": ["tools.lock", "tunnel.lock"]
+}
