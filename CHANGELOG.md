@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- `release-assets.yml` checks the signature against its own exact identity, `release-assets.yml` on the ref the run ran on, instead of any workflow of this repository; the changed-archive check passes only when cosign and slsa-verifier each refuse it in their own words; a run started by hand runs from main only (83a4bdf). The verify commands at the top of the workflow name the same identity, and `--source-tag` for a release.
+
 ## [1.2.1] - 2026-11-15
 
 ### Added
