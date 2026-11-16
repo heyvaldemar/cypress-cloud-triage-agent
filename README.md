@@ -23,7 +23,7 @@ Every line is a check in `tests/e2e/run.sh` or `tests/e2e/models.sh` on a fresh 
 
 | Claim | Proof |
 |---|---|
-| A customer's text reaches the agent through Cypress | Cypress 16.2.0, in its pinned image, runs three tests against `app/`: one passes, two fail, and one failure message carries the 620-character note from `app/orders.json` |
+| A customer's text reaches the agent through Cypress | Cypress 16.3.0, in its pinned image, runs three tests against `app/`: one passes, two fail, and one failure message carries the 620-character note from `app/orders.json` |
 | Only a delivery signed with the secret starts a triage | unsigned, forged, signed with another secret, body or timestamp changed after signing: each refused, none starts a Job; the CI trigger's signed delivery starts one |
 | A replay starts nothing, even with the unsigned headers changed | the same delivery again, and again with a new `X-Cypress-Event-Id`: 409; a retry signed with a new timestamp: 200, still one Job |
 | The receiver reads only what is signed | a stale or future timestamp, a timestamp that is not a number, an accessibility body sent as `run.completed`, a project it does not serve, a body over 64 KiB: each refused or ignored |

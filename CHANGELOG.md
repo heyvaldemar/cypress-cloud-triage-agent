@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- Cypress 16.3.0 (`cypress/included`, digest checked against Docker Hub's registry, pushed 2026-11-11) in `tests/e2e/run.sh` and `tests/e2e/models.sh`. 16.3.0 is the version `cypress tap` needs, the way an agent in a cloud sandbox runs Cypress itself ([docs](https://docs.cypress.io/app/tooling/cypress-agent-sandboxes)).
 - `release-assets.yml` checks the signature against its own exact identity, `release-assets.yml` on the ref the run ran on, instead of any workflow of this repository; the changed-archive check passes only when cosign and slsa-verifier each refuse it in their own words; a run started by hand runs from main only (83a4bdf). The verify commands at the top of the workflow name the same identity, and `--source-tag` for a release.
 
 ## [1.2.1] - 2026-11-15

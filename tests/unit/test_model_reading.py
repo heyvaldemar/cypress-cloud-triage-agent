@@ -116,7 +116,7 @@ class Found(unittest.TestCase):
 
     def cypress(self, *errors):
         with open(os.path.join(self.dir, "out", "cypress-results.json"), "w") as f:
-            json.dump({"totalTests": 3, "totalPassed": 1, "totalFailed": 2, "cypressVersion": "16.2.0",
+            json.dump({"totalTests": 3, "totalPassed": 1, "totalFailed": 2, "cypressVersion": "16.3.0",
                        "runs": [{"tests": [{"displayError": e} for e in errors]}]}, f)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
