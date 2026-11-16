@@ -48,3 +48,8 @@
 "tests/e2e/checks.py"	"return kept.get(\"status\") == 202 and kept.get(\"answer\") == {\"triage\": \"started\"}"	"return kept.get(\"status\") == 202"	"delivery"	"a delivery check that takes any 202 as a triage started, an ignored body among them"
 "scripts/status.py"	"s.get(\"conclusion\") in (\"success\", \"failure\")"	"s.get(\"conclusion\") is not None"	"status"	"a status writer that counts a run whose tunnel step was skipped as a webhook run"
 "scripts/status.py"	"if r[\"conclusion\"] != \"success\" or not r[\"webhook\"]:"	"if r[\"conclusion\"] != \"success\":"	"status"	"a webhook streak that runs on through a scheduled run that never opened the tunnel"
+"scripts/status.py"	"    if key in cache:\n"	"    if False:\n"	"status"	"a status writer that downloads every run's results on each write"
+"scripts/status.py"	"key = \"%d-%d\" % (r[\"id\"], r.get(\"run_attempt\", 1))"	"key = \"%d-1\" % r[\"id\"]"	"status"	"a status writer that takes a rerun's results from its first attempt"
+"scripts/status.py"	"out[\"runs\"] = [{k: t[k] for k in (\"seconds\", \"vcpu_seconds\", \"usd\") if k in t} for t in b.get(\"runs\", [])]"	"out[\"runs\"] = b.get(\"runs\", [])"	"status"	"a status writer that keeps more of a model block than it reads"
+"scripts/status.py"	"    except DOWNLOAD_ERRORS as e:\n        kept = ["	"    except () as e:\n        kept = ["	"status"	"a status writer that stops at a failed download instead of writing the live part"
+"scripts/status.py"	"\"checks_passed\": None if unknown else sum("	"\"checks_passed\": sum("	"status"	"a status writer that counts checks it could not read"

@@ -38,11 +38,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # The runs already read are kept on the branch (models-runs.json), so
+      # this write downloads only the new ones. The branch is public: no
+      # credential is needed to fetch it.
+      - name: The branch `status` as it was
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous"
+          if git fetch -q --depth=1 origin status; then
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/previous"
+          fi
+
       - name: Read the e2e runs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           E2E_WORKFLOW: e2e.yml
           LIVE_WORKFLOW: live.yml
+          STATUS_PREVIOUS: ${{ runner.temp }}/previous
         run: python3 scripts/status.py "$RUNNER_TEMP/status"
 
       - name: Replace the branch `status`

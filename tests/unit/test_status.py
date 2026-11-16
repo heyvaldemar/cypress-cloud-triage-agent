@@ -9,13 +9,20 @@ scheduled streak is what "daily" is said on, so it must stop at the first
 scheduled run that failed. The webhook mode's streak (ADR 9) is what "daily"
 is said of Cypress Cloud's delivery on, so it must also stop at a scheduled
 run that did not open the tunnel.
+
+A write reads a run's model results once: the next takes them from the
+branch `status` and downloads only runs, or attempts of a run, it has not
+read. A download that fails keeps the last status.json and still writes the
+live part.
 """
 import datetime
 import importlib.util
 import io
 import json
 import os
+import tempfile
 import unittest
+import urllib.error
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -118,6 +125,116 @@ class LiveStatusTest(unittest.TestCase):
         self.assertEqual((latest["id"], latest["url"], latest["event"]), (7, "https://example.invalid/run/7", "schedule"))
         for key in ("days_with_runs", "green_days", "streak_days", "window_days", "measured"):
             self.assertIn(key, s if key != "measured" else latest)
+
+
+
+BLOCK = {"model": "m", "triages": 3, "acted_on_the_note": 1, "asks": {"called run_shell": 2},
+         "attempts": {"outside": {"calls": 2, "outcomes": {"blocked": 2}}},
+         "runs": [{"seconds": 40, "vcpu_seconds": 160, "usd": 0.002, "summary": "words a model wrote"}]}
+
+
+class Artifacts:
+    """Each e2e run's model artifact, counting the downloads; a download fails
+    while `down` is set, the way GitHub's storage answered on 2026-11-16."""
+
+    def __init__(self, jobs=None):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("e2e-results.json", json.dumps({"checks": [{"state": "PASS", "name": "a"}],
+                                                       "measured": [], "models": [BLOCK]}))
+        self.zip, self.downloads, self.down, self.jobs = buf.getvalue(), 0, False, jobs or {}
+
+    def get(self, url, raw=False):
+        if raw:
+            if self.down:
+                raise urllib.error.HTTPError(url, 503, "Egress is over the account limit.", None, None)
+            self.downloads += 1
+            return self.zip
+        if url.endswith("/jobs"):
+            n = int(url.split("/runs/")[1].split("/")[0])
+            return {"jobs": [{"name": status.LIVE_JOB, "conclusion": self.jobs.get(n, "success"),
+                              "steps": [{"name": status.TUNNEL_STEP, "conclusion": "success"}]}]}
+        return {"artifacts": [{"name": "e2e-results-m", "expired": False, "archive_download_url": "zip"}]}
+
+
+class ReadOnceTest(unittest.TestCase):
+    def setUp(self):
+        self.gh = Artifacts()
+        status.get = self.gh.get
+
+    def test_a_run_is_downloaded_once(self):
+        listed = [run(1, 12, "schedule"), run(2, 13, "schedule")]
+        kept = {}
+        first = status.models_window("o/r", listed, {}, kept)
+        self.assertEqual(self.gh.downloads, 2)
+        again = status.models_window("o/r", listed, json.loads(json.dumps(kept)), {})
+        self.assertEqual(self.gh.downloads, 2, "the second write downloaded a run it had read")
+        self.assertEqual(first, again)
+        self.assertEqual(first["models"][0]["triages"], 6)
+
+    def test_a_rerun_is_read_again(self):
+        r = run(1, 12, "schedule")
+        kept = {}
+        status.models_window("o/r", [r], {}, kept)
+        status.models_window("o/r", [dict(r, run_attempt=2)], kept, {})
+        self.assertEqual(self.gh.downloads, 2, "a rerun's results were taken from its first attempt")
+
+    def test_what_is_kept_is_only_what_the_window_reads(self):
+        kept = {}
+        status.models_window("o/r", [run(1, 12, "schedule")], {}, kept)
+        self.assertEqual(kept["1-1"][0]["runs"], [{"seconds": 40, "vcpu_seconds": 160, "usd": 0.002}])
+
+
+class DownloadFailsTest(unittest.TestCase):
+    def test_the_live_part_is_written_and_the_last_status_kept(self):
+        gh = Artifacts()
+        gh.down = True
+        status.get = gh.get
+        status.runs = lambda repo, workflow, since: [run(1, 12, "schedule"), run(2, 13, "schedule")]
+        with tempfile.TemporaryDirectory() as previous, tempfile.TemporaryDirectory() as out:
+            for name, body in (("status.json", {"written_at": "before"}), ("badge-days.json", {"message": "before"}),
+                               ("status-live.json", {"runs": -1})):
+                with open(os.path.join(previous, name), "w") as f:
+                    json.dump(body, f)
+            env = {"GITHUB_REPOSITORY": "o/r", "E2E_WORKFLOW": "e2e.yml", "LIVE_WORKFLOW": "live.yml",
+                   "STATUS_PREVIOUS": previous}
+            saved = {k: os.environ.get(k) for k in env}
+            os.environ.update(env)
+            try:
+                status.main(out, now=NOW)
+            finally:
+                for k, v in saved.items():
+                    os.environ.pop(k) if v is None else os.environ.__setitem__(k, v)
+            with open(os.path.join(out, "status.json")) as f:
+                self.assertEqual(json.load(f), {"written_at": "before"})
+            with open(os.path.join(out, "status-live.json")) as f:
+                live = json.load(f)
+            self.assertEqual(live["webhook_scheduled_streak"], 2, "the live part was not written fresh")
+            self.assertIsNone(live["latest"]["checks_passed"], "checks it could not read were written as counted")
+
+    def test_the_same_run_s_checks_are_kept_from_the_last_write(self):
+        gh = Artifacts()
+        gh.down = True
+        status.get = gh.get
+        status.runs = lambda repo, workflow, since: [run(5, 13, "schedule")]
+        last = {"latest": {"id": 5, "checks_passed": 110, "checks_failed": 0, "checks": [{"state": "PASS"}] * 110,
+                           "measured": []}}
+        live = status.live_status("o/r", "live.yml", NOW, last)
+        self.assertEqual((live["latest"]["checks_passed"], live["latest"]["checks_failed"]), (110, 0))
+
+    def test_with_no_last_status_the_failure_stands(self):
+        gh = Artifacts()
+        gh.down = True
+        status.get = gh.get
+        status.runs = lambda repo, workflow, since: [run(1, 12, "schedule")]
+        with tempfile.TemporaryDirectory() as previous, tempfile.TemporaryDirectory() as out:
+            os.environ.update({"GITHUB_REPOSITORY": "o/r", "E2E_WORKFLOW": "e2e.yml", "STATUS_PREVIOUS": previous})
+            try:
+                with self.assertRaises(urllib.error.HTTPError):
+                    status.main(out, now=NOW)
+            finally:
+                for k in ("GITHUB_REPOSITORY", "E2E_WORKFLOW", "STATUS_PREVIOUS"):
+                    os.environ.pop(k, None)
 
 
 if __name__ == "__main__":
