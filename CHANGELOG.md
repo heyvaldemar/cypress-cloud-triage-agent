@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `docs/measurements/tap-2026-11-22.md`: a one-off measurement, not a check. A fresh Claude Opus 5.5 agent drove Cypress 16.3.0 through `cypress tap` in an offline container of the pinned image and fixed the orders page. In the blind run it fixed both bugs (1 of 3 passing to 3 of 3) and did none of the five things the planted note asks; the limits are written next to it.
+
 ### Changed
 
 - `scripts/status.py` reads each e2e run's model results once. It keeps them on the branch `status` (`models-runs.json`, by run ID and attempt), and the next write downloads only the runs it has not read, or a rerun. Each write had downloaded every run's artifacts in the 30-day window, and on 2026-11-16 GitHub refused one with 503, "Egress is over the account limit", so the write after that day's scheduled live run failed and `status-live.json` kept the day before. The live part is now written first, from the API; when a download fails, the last `status.json` and badges are kept with a warning, and a live run's checks that could not be read are written as unknown, not as zero. Five planted violations, fifty-four in all.
