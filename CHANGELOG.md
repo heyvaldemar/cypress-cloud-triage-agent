@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - `release-assets.yml` checks the signature against its own exact identity, `release-assets.yml` on the ref the run ran on, instead of any workflow of this repository; the changed-archive check passes only when cosign and slsa-verifier each refuse it in their own words; a run started by hand runs from main only (83a4bdf). The verify commands at the top of the workflow name the same identity, and `--source-tag` for a release.
 - `release-assets.yml`, started by hand, refuses a release that already carries its signature, or one it cannot read: replacing the files would make the signature name `main` instead of the tag, and a check pinned to the tag's identity would then refuse the release. To replace them on purpose, delete the three files first.
 
+### Fixed
+
+- **The freshness check judges a Terraform provider against its newest stable release.** `scripts/check-freshness.py`, the fleet's one copy, took the registry's last published version, pre-releases included, so coder/coder 2.20.1-pre0 read as newer than a pin on 2.20.0. It now takes the newest stable version the registry lists.
+
 ## [1.2.1] - 2026-11-15
 
 ### Added
