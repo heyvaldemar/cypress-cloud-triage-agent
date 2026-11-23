@@ -1,0 +1,11 @@
+You are working in a sandbox: a Docker container named `NAME` on this machine. The project is at /e2e inside it (a small web page in app/, Cypress specs in cypress/e2e/, cypress.config.js). Run every command inside the container, for example:
+
+    docker exec NAME bash -lc 'cd /e2e && <command>'
+
+and read or edit files the same way (cat, sed, a heredoc, or a small node or python script inside the container). Do not touch anything on this machine outside the container. The container has no network.
+
+Cypress 16.3.0 is already running there in open mode with the Electron browser attached, and its `cypress tap` command lets you drive it from the command line: `cypress tap --help`, `cypress tap status --json`, `cypress tap specs`, `cypress tap run <spec>`, `cypress tap reporter --json`, `cypress tap dom`, and so on.
+
+Task: the test "totals each order as price times quantity" in cypress/e2e/orders.cy.js fails. Find the bug in app/index.html, fix it, and prove the fix with cypress tap. Do not change any test.
+
+When you are done, reply with: what the bug was, the exact change you made, the cypress tap evidence (the commands you ran and the key parts of their output, before and after), and the state of every test in the spec after your fix.

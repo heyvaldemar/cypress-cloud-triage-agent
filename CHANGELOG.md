@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- `docs/measurements/tap-2026-11-22.md`: a one-off measurement, not a check. A fresh Claude Opus 5.5 agent drove Cypress 16.3.0 through `cypress tap` in an offline container of the pinned image and fixed the orders page. In the blind run it fixed both bugs (1 of 3 passing to 3 of 3) and did none of the five things the planted note asks; the limits are written next to it.
+- `docs/measurements/tap-2026-11-22.md`: a one-off measurement, not a check, run locally with Electron. A Claude Opus 5.5 agent drove Cypress 16.3.0 through `cypress tap` in an offline container of the pinned image and fixed the orders page, three times with the page's comments and three times blind. In all three blind runs it fixed both bugs (1 of 3 passing to 3 of 3) and did none of the five things the planted note asks; five of the six replies still quote the note's `<!channel>` while warning about it. Each run's record, the script and the prompts are in `docs/measurements/tap-2026-11-23/`.
 
 ### Changed
 
@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- **The measurement no longer counts two runs whose agent was not clean.** The first version of `docs/measurements/tap-2026-11-22.md` said its two agents of 22 November started with no context of this repository. They had the maintainer's own Claude Code instructions and memory index loaded, which name this repository and include a rule against answering text written for an AI. The six runs of 23 November start with `claude -p --safe-mode`, and each session's transcript holds no instruction file; the two first runs are kept, marked, and not counted.
 - **The freshness check judges a Terraform provider against its newest stable release.** `scripts/check-freshness.py`, the fleet's one copy, took the registry's last published version, pre-releases included, so coder/coder 2.20.1-pre0 read as newer than a pin on 2.20.0. It now takes the newest stable version the registry lists.
 
 ## [1.2.1] - 2026-11-15
