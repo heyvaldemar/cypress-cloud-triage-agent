@@ -4,7 +4,7 @@
 # and only on Linux: the tunnel runs inside that job and nowhere else.
 #
 # The hash is the one Cloudflare lists under "SHA256 Checksums" in the
-# release notes of 2026.11.1, and the digest GitHub shows for the asset.
+# release notes of 2026.11.2, and the digest GitHub shows for the asset.
 #
 # name  version  platform  url  member-in-archive  sha256
-cloudflared 2026.11.1 linux-amd64 https://github.com/cloudflare/cloudflared/releases/download/2026.11.1/cloudflared-linux-amd64 cloudflared 97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7
+cloudflared 2026.11.2 linux-amd64 https://github.com/cloudflare/cloudflared/releases/download/2026.11.2/cloudflared-linux-amd64 cloudflared 56f13335143ec0e22772963290683a84a04114a35ec64cbc794a4d39ff9bb8cf

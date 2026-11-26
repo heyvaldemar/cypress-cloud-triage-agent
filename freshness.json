@@ -1,4 +1,5 @@
 {
   "checks": ["charts", "charts_lock", "images", "tools", "ci_images"],
+  "skip_dirs": ["docs/measurements/"],
   "tool_locks": ["tools.lock", "tunnel.lock"]
 }
